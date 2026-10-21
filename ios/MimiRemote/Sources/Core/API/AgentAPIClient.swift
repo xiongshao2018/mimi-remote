@@ -393,7 +393,7 @@ struct AgentAPIClient {
     let token: String
     private let session: URLSession
 
-    init(endpoint: String, token: String, session: URLSession = .shared) {
+    init(endpoint: String, token: String, session: URLSession = AgentTransport.sharedSession) {
         self.endpoint = endpoint
         self.token = token
         self.session = session

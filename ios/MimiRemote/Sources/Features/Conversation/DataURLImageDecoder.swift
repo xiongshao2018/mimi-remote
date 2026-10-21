@@ -193,7 +193,7 @@ enum RemoteURLImageLoader {
         cacheKey: String,
         profileID: String = "legacy",
         maxPixelSize: Int,
-        session: URLSession = .shared
+        session: URLSession = AgentTransport.sharedSession
     ) async -> UIImage? {
         guard !Task.isCancelled else {
             return nil

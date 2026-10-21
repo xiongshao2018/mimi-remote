@@ -96,7 +96,7 @@ final class FileUploadStore: ObservableObject {
     private var contexts: [UUID: Context] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = AgentTransport.sharedSession) {
         self.session = session
     }
 

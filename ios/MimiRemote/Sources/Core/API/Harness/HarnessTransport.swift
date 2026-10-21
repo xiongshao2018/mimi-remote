@@ -162,7 +162,7 @@ enum HarnessTransportSession {
         if let protocolClasses {
             configuration.protocolClasses = protocolClasses
         }
-        return URLSession(configuration: configuration)
+        return AgentTransport.session(configuration: configuration)
     }
 }
 

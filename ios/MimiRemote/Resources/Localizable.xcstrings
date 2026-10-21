@@ -1,6 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "ui.host_certificate_changed": {
+      "comment": "Shown when the host certificate fingerprint presented over the public network no longer matches the one captured during pairing.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The host certificate changed. Scan the pairing QR code again to trust the new certificate."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "宿主证书已变化，请重新扫描配对二维码以信任新证书"
+          }
+        }
+      }
+    },
     "ui.question_reply_label": {
       "comment": "Label on the user's answer to an agent question in the conversation timeline.",
       "extractionState": "manual",

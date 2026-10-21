@@ -5,7 +5,7 @@ extension AppStore {
         endpoint: String,
         token: String,
         timeout: TimeInterval,
-        session: URLSession = .shared,
+        session: URLSession = AgentTransport.sharedSession,
         transportFactory: @escaping () -> CodexAppServerTransport = { URLSessionCodexAppServerTransport() }
     ) async throws {
         let config = try await AgentAPIClient(endpoint: endpoint, token: token, session: session)

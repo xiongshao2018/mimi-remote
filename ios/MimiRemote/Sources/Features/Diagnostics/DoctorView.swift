@@ -630,7 +630,7 @@ struct DoctorView: View {
             request.timeoutInterval = 20
             request.setValue("Bearer \(appStore.token)", forHTTPHeaderField: "Authorization")
             MimiProtocolContract.applyClientHeaders(to: &request)
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await AgentTransport.sharedSession.data(for: request)
             try Task.checkCancellation()
             doctorState = .loaded(try DoctorDiagnosticsParser.parseDoctorResponse(data: data, response: response))
         } catch is CancellationError {
@@ -666,7 +666,7 @@ struct DoctorView: View {
             request.timeoutInterval = 30
             request.setValue("Bearer \(appStore.token)", forHTTPHeaderField: "Authorization")
             MimiProtocolContract.applyClientHeaders(to: &request)
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await AgentTransport.sharedSession.data(for: request)
             try Task.checkCancellation()
             historyState = .loaded(try DoctorDiagnosticsParser.parseRawResponse(
                 data: data,

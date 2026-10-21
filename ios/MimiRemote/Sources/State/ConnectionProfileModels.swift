@@ -181,6 +181,11 @@ struct ConnectionProfile: Codable, Identifiable, Equatable {
     var hostPlatform: HostPlatform
     var connectionRoute: ConnectionProfileRoute
     var revision: UInt64
+    /// 公网 HTTPS 入口的证书指纹（base64 SHA-256 of certificate DER）。
+    ///
+    /// 它是档案的一部分而不是全局配置：只有扫码配对时才拿到过它，删除档案即撤销信任，
+    /// 同一公网 IP 被另一台宿主复用时不会被旧指纹锁死。局域网与 Tailscale 档案恒为 nil。
+    var tlsCertPin: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -195,6 +200,7 @@ struct ConnectionProfile: Codable, Identifiable, Equatable {
         case hostPlatform
         case connectionRoute
         case revision
+        case tlsCertPin
     }
 
     init(
@@ -209,7 +215,8 @@ struct ConnectionProfile: Codable, Identifiable, Equatable {
         installationID: String? = nil,
         hostPlatform: HostPlatform = .unknown,
         connectionRoute: ConnectionProfileRoute? = nil,
-        revision: UInt64 = 0
+        revision: UInt64 = 0,
+        tlsCertPin: String? = nil
     ) {
         self.id = id
         let acceptsTailscaleMetadata = Self.isTailscaleIPEndpoint(endpoint)
@@ -246,6 +253,9 @@ struct ConnectionProfile: Codable, Identifiable, Equatable {
         self.hostPlatform = hostPlatform
         self.connectionRoute = resolvedRoute
         self.revision = revision
+        // 指纹只对档案当前 endpoint 的 host 有效。地址归属由提交连接设置的那一步判定，
+        // 这里只做格式校验，避免把误填的字符串当成指纹写进 Keychain 之外的本地存储。
+        self.tlsCertPin = TLSCertificatePinning.normalizedPin(tlsCertPin)
     }
 
     init(from decoder: Decoder) throws {
@@ -292,6 +302,19 @@ struct ConnectionProfile: Codable, Identifiable, Equatable {
         installationID = try container.decodeIfPresent(String.self, forKey: .installationID)
         hostPlatform = try container.decodeIfPresent(HostPlatform.self, forKey: .hostPlatform) ?? .unknown
         revision = try container.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
+        tlsCertPin = TLSCertificatePinning.normalizedPin(
+            try container.decodeIfPresent(String.self, forKey: .tlsCertPin)
+        )
+    }
+
+    /// 两个地址是否指向同一个 host。沿用旧指纹的前提是 host 没变，
+    /// 因此这里只比较归一化后的主机名，不看端口和路由候选。
+    static func isSameEndpointHost(_ left: String?, _ right: String?) -> Bool {
+        guard let left = TLSCertificatePinning.host(fromEndpoint: left ?? ""),
+              let right = TLSCertificatePinning.host(fromEndpoint: right ?? "") else {
+            return false
+        }
+        return left == right
     }
 
     /// DNS 路由优先，扫码得到的 IP Endpoint 永远保留为回退地址。
@@ -704,6 +727,8 @@ struct PreparedConnectionSettings: Equatable {
     let hostPlatform: HostPlatform
     let hostContext: PreparedHostContext?
     let capabilityNegotiation: HostCapabilityNegotiation
+    /// 本次配对得到的公网证书指纹。nil 表示这次准备没有带来新指纹，提交时沿用档案旧值。
+    let tlsCertPin: String?
 
     init(
         endpoint: String,
@@ -718,7 +743,8 @@ struct PreparedConnectionSettings: Equatable {
         hostDeviceName: String? = nil,
         hostPlatform: HostPlatform = .unknown,
         hostContext: PreparedHostContext? = nil,
-        capabilityNegotiation: HostCapabilityNegotiation = .notNegotiated
+        capabilityNegotiation: HostCapabilityNegotiation = .notNegotiated,
+        tlsCertPin: String? = nil
     ) {
         self.endpoint = endpoint
         self.activeEndpoint = activeEndpoint ?? endpoint
@@ -743,6 +769,7 @@ struct PreparedConnectionSettings: Equatable {
         self.hostPlatform = hostPlatform
         self.hostContext = hostContext
         self.capabilityNegotiation = capabilityNegotiation
+        self.tlsCertPin = TLSCertificatePinning.normalizedPin(tlsCertPin)
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -758,6 +785,7 @@ struct PreparedConnectionSettings: Equatable {
             lhs.hostDeviceName == rhs.hostDeviceName &&
             lhs.hostPlatform == rhs.hostPlatform &&
             lhs.hostContext === rhs.hostContext &&
-            lhs.capabilityNegotiation == rhs.capabilityNegotiation
+            lhs.capabilityNegotiation == rhs.capabilityNegotiation &&
+            lhs.tlsCertPin == rhs.tlsCertPin
     }
 }

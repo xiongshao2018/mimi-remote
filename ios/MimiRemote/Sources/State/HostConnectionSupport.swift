@@ -7,6 +7,7 @@ enum PairingLinkError: LocalizedError, Equatable {
     case missingToken
     case expired
     case missingTailcatAddress
+    case certificatePinMismatch
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +21,8 @@ enum PairingLinkError: LocalizedError, Equatable {
             return L10n.text("ui.the_pairing_qr_code_has_expired")
         case .missingTailcatAddress:
             return L10n.text("ui.tailcat_pairing_address_missing")
+        case .certificatePinMismatch:
+            return L10n.text("ui.host_certificate_changed")
         }
     }
 }
@@ -29,12 +32,16 @@ struct PairingCredentials: Equatable {
     let token: String
     let tailscaleDNSName: String?
     let tailscaleDeviceName: String?
+    /// 公网 HTTPS 入口的证书指纹。带 token 的长链接同样带 `tls_pin`，
+    /// 没有它按公网 IP 连接时系统无法验证宿主自签证书。
+    let tlsCertPin: String?
 
     init(
         endpoint: String,
         token: String,
         tailscaleDNSName: String? = nil,
-        tailscaleDeviceName: String? = nil
+        tailscaleDeviceName: String? = nil,
+        tlsCertPin: String? = nil
     ) {
         self.endpoint = endpoint
         self.token = token
@@ -47,6 +54,7 @@ struct PairingCredentials: Equatable {
                 dnsName: self.tailscaleDNSName
             )
             : nil
+        self.tlsCertPin = TLSCertificatePinning.normalizedPin(tlsCertPin)
     }
 }
 
@@ -55,13 +63,31 @@ struct PairingTicket: Equatable {
     let issuedAt: String
     let expiresAt: String
     let pairSignature: String
+    /// 二维码里的公网证书指纹。它参与 agentd 侧的票据验签，因此手机必须原样带回，
+    /// 并且在发起 claim 之前就先登记，否则第一次 TLS 握手就已经失败。
+    let tlsCertPin: String?
+
+    init(
+        endpoint: String,
+        issuedAt: String,
+        expiresAt: String,
+        pairSignature: String,
+        tlsCertPin: String? = nil
+    ) {
+        self.endpoint = endpoint
+        self.issuedAt = issuedAt
+        self.expiresAt = expiresAt
+        self.pairSignature = pairSignature
+        self.tlsCertPin = TLSCertificatePinning.normalizedPin(tlsCertPin)
+    }
 
     var claimRequest: PairingClaimRequest {
         PairingClaimRequest(
             endpoint: endpoint,
             issuedAt: issuedAt,
             expiresAt: expiresAt,
-            pairSignature: pairSignature
+            pairSignature: pairSignature,
+            tlsPin: tlsCertPin
         )
     }
 
@@ -71,7 +97,8 @@ struct PairingTicket: Equatable {
             issuedAt: issuedAt,
             expiresAt: expiresAt,
             pairSignature: pairSignature,
-            tailcatClientKey: tailcatClientKey
+            tailcatClientKey: tailcatClientKey,
+            tlsPin: tlsCertPin
         )
     }
 
@@ -87,7 +114,8 @@ struct PairingTicket: Equatable {
             pairSignature: pairSignature,
             tailcatClientKey: tailcatClientKey,
             managedPairingSessionID: pairingSessionID,
-            managedPairingGrant: managedPairingGrant
+            managedPairingGrant: managedPairingGrant,
+            tlsPin: tlsCertPin
         )
     }
 }
@@ -331,11 +359,49 @@ extension AppStore {
         "unbound:\(profileID)"
     }
 
+    static func pairingDate(from raw: String) -> Date? {
+        if let seconds = TimeInterval(raw) {
+            return Date(timeIntervalSince1970: seconds)
+        }
+        // agentd 为保证同一秒刷新出的短期票据仍可区分，会输出 RFC3339Nano 小数秒。
+        // 先解析新版格式，再回退到旧版无小数秒格式，保持已发布二维码兼容。
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: raw) {
+            return date
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
+    }
+
+    static func tlsPinEntries(in profiles: [ConnectionProfile]) -> [(endpoint: String, pin: String?)] {
+        profiles.map { (endpoint: $0.endpoint, pin: $0.tlsCertPin) }
+    }
+
+
+    /// 本次提交是否沿用旧档案的公网证书指纹。
+    ///
+    /// 只有扫码配对才会带来新指纹；切换电脑、改名、重连这些路径的 prepared 里没有指纹，
+    /// 直接覆盖会把已建立的信任抹掉，公网直连立刻连不上。反过来 host 已经变了就必须作废，
+    /// 否则新宿主会被上一台机器的证书指纹锁死。
+    static func resolvedTLSCertPin(
+        prepared: PreparedConnectionSettings,
+        existing: ConnectionProfile
+    ) -> String? {
+        if let preparedPin = prepared.tlsCertPin {
+            return preparedPin
+        }
+        return ConnectionProfile.isSameEndpointHost(prepared.endpoint, existing.endpoint)
+            ? existing.tlsCertPin
+            : nil
+    }
+
     static func defaultConnectionRouteVersionProbe(
         endpoint: String,
         token: String,
         timeout: TimeInterval,
-        session: URLSession = .shared
+        session: URLSession = AgentTransport.sharedSession
     ) async throws -> VersionResponse {
         try await AgentAPIClient(endpoint: endpoint, token: token, session: session)
             .version(timeout: min(timeout, 2))

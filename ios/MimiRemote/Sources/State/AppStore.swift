@@ -11,7 +11,14 @@ final class AppStore: ObservableObject {
     }
 
     @Published var endpoint: String
-    @Published private(set) var connectionProfiles: [ConnectionProfile]
+    /// 连接档案是公网证书指纹的唯一持久落点。档案集合每次变化都重建指纹表，
+    /// 这样删除档案即撤销信任，而尚未被档案接管的待生效指纹由表内保留。
+    @Published private(set) var connectionProfiles: [ConnectionProfile] {
+        didSet {
+            guard connectionProfiles != oldValue else { return }
+            TLSCertificatePinTable.shared.replaceAll(Self.tlsPinEntries(in: connectionProfiles))
+        }
+    }
     @Published private(set) var activeConnectionProfileID: String?
     @Published private(set) var connectionGeneration = 0
     @Published private(set) var activeHostState: ActiveHostState
@@ -100,7 +107,7 @@ final class AppStore: ObservableObject {
         localAgentPairingClaim: LocalAgentPairingClaim? = nil,
         routeProbe: ConnectionRouteProbe? = nil,
         routeVersionProbe: ConnectionRouteVersionProbe? = nil,
-        agentAPISession: URLSession = .shared,
+        agentAPISession: URLSession = AgentTransport.sharedSession,
         gatewayProbeTransportFactory: @escaping () -> CodexAppServerTransport = { URLSessionCodexAppServerTransport() },
         gatewayTransportFactory: (() -> CodexAppServerTransport)? = nil,
         hostSwitchPreparationTimeout: TimeInterval = 8,
@@ -240,6 +247,9 @@ final class AppStore: ObservableObject {
         self.endpoint = initialEndpoint
         self.token = initialToken
         connectionProfiles = initialProfiles
+        // 属性观察器不在 init 内触发，首屏档案必须显式登记一次，
+        // 否则冷启动后第一次公网请求就会因为查不到指纹而失败。
+        TLSCertificatePinTable.shared.replaceAll(Self.tlsPinEntries(in: initialProfiles))
         activeConnectionProfileID = initialActiveProfileID
         let initialProfile = initialProfiles.first { $0.id == initialActiveProfileID }
         let initialProfileID = initialProfile?.id ?? initialActiveProfileID ?? "legacy"
@@ -521,7 +531,8 @@ final class AppStore: ObservableObject {
         tailscaleDNSName: String? = nil,
         tailscaleDeviceName: String? = nil,
         hostDeviceName: String? = nil,
-        adoptsHostDeviceName: Bool = true
+        adoptsHostDeviceName: Bool = true,
+        tlsCertPin: String? = nil
     ) async throws -> PreparedConnectionSettings {
         let normalizedEndpoint = try Self.validatedEndpoint(endpoint)
         let normalizedDNSName = ConnectionProfile.normalizedTailscaleDNSName(tailscaleDNSName)
@@ -545,7 +556,8 @@ final class AppStore: ObservableObject {
                         tailscaleDNSName: normalizedDNSName,
                         tailscaleDeviceName: normalizedDeviceName,
                         hostDeviceName: hostDeviceName,
-                        adoptsHostDeviceName: adoptsHostDeviceName
+                        adoptsHostDeviceName: adoptsHostDeviceName,
+                        tlsCertPin: tlsCertPin
                     )
                 }
 
@@ -558,7 +570,8 @@ final class AppStore: ObservableObject {
                     profileTarget: profileTarget,
                     tailscaleDNSName: normalizedDNSName,
                     tailscaleDeviceName: normalizedDeviceName,
-                    hostDeviceName: adoptsHostDeviceName ? hostDeviceName : nil
+                    hostDeviceName: adoptsHostDeviceName ? hostDeviceName : nil,
+                    tlsCertPin: tlsCertPin
                 )
             } catch {
                 if Task.isCancelled || error is CancellationError {
@@ -590,22 +603,27 @@ final class AppStore: ObservableObject {
         profileTarget: PreparedConnectionProfileTarget = .currentOrNew(displayName: nil)
     ) async throws -> PreparedConnectionSettings {
         if let ticket = try Self.pairingTicket(from: url) {
+            TLSCertificatePinTable.shared.registerPendingPin(ticket.tlsCertPin, forEndpoint: ticket.endpoint)
             let credentials = try await claimPairing(ticket)
             return try await prepareConnectionSettings(
                 endpoint: credentials.endpoint,
                 token: credentials.token,
                 profileTarget: profileTarget,
                 tailscaleDNSName: credentials.tailscaleDNSName,
-                tailscaleDeviceName: credentials.tailscaleDeviceName
+                tailscaleDeviceName: credentials.tailscaleDeviceName,
+                tlsCertPin: credentials.tlsCertPin
             )
         }
         let credentials = try Self.pairingCredentials(from: url)
+        // 带 token 的长链接同样带 tls_pin。这里先登记，后面的候选探测才能验通公网自签证书。
+        TLSCertificatePinTable.shared.registerPendingPin(credentials.tlsCertPin, forEndpoint: credentials.endpoint)
         return try await prepareConnectionSettings(
             endpoint: credentials.endpoint,
             token: credentials.token,
             profileTarget: profileTarget,
             tailscaleDNSName: credentials.tailscaleDNSName,
-            tailscaleDeviceName: credentials.tailscaleDeviceName
+            tailscaleDeviceName: credentials.tailscaleDeviceName,
+            tlsCertPin: credentials.tlsCertPin
         )
     }
 
@@ -690,7 +708,8 @@ final class AppStore: ObservableObject {
                     installationID: installationID ?? current.installationID,
                     hostPlatform: Self.resolvedHostPlatform(prepared.hostPlatform, fallback: current.hostPlatform),
                     connectionRoute: prepared.route.profileRoute,
-                    revision: current.revision &+ 1
+                    revision: current.revision &+ 1,
+                    tlsCertPin: Self.resolvedTLSCertPin(prepared: prepared, existing: current)
                 )
             } else {
                 try rejectDuplicateInstallation(installationID, excludingProfileID: nil)
@@ -712,7 +731,8 @@ final class AppStore: ObservableObject {
                     lastSuccessfulAt: prepared.validatedAt,
                     installationID: installationID,
                     hostPlatform: prepared.hostPlatform,
-                    connectionRoute: prepared.route.profileRoute
+                    connectionRoute: prepared.route.profileRoute,
+                    tlsCertPin: prepared.tlsCertPin
                 )
             }
         case .newProfile(let id, let displayName):
@@ -735,7 +755,8 @@ final class AppStore: ObservableObject {
                 lastSuccessfulAt: prepared.validatedAt,
                 installationID: installationID,
                 hostPlatform: prepared.hostPlatform,
-                connectionRoute: prepared.route.profileRoute
+                connectionRoute: prepared.route.profileRoute,
+                tlsCertPin: prepared.tlsCertPin
             )
         case .existingProfile(let id):
             guard let existing = connectionProfiles.first(where: { $0.id == id }) else {
@@ -772,7 +793,8 @@ final class AppStore: ObservableObject {
                 installationID: installationID ?? existing.installationID,
                 hostPlatform: Self.resolvedHostPlatform(prepared.hostPlatform, fallback: existing.hostPlatform),
                 connectionRoute: prepared.route.profileRoute,
-                revision: existing.revision &+ 1
+                revision: existing.revision &+ 1,
+                tlsCertPin: Self.resolvedTLSCertPin(prepared: prepared, existing: existing)
             )
         }
 
@@ -1459,12 +1481,22 @@ final class AppStore: ObservableObject {
     }
 
     private func claimPairing(_ ticket: PairingTicket) async throws -> PairingCredentials {
+        // 公网 claim 本身就是 HTTPS。指纹必须在发起请求之前登记，否则第一次 TLS 握手
+        // 就已经失败，二维码里的信任依据也就用不上了。
+        TLSCertificatePinTable.shared.registerPendingPin(ticket.tlsCertPin, forEndpoint: ticket.endpoint)
         let response = try await AgentAPIClient(endpoint: ticket.endpoint, token: "").claimPairing(ticket.claimRequest)
+        // agentd 回显当前公网证书指纹。票据带了指纹却不一致，说明宿主换过证书或链路被
+        // 替换；票据没带指纹（局域网/Tailscale）时不能因为宿主同时开了公网就报错。
+        let responsePin = TLSCertificatePinning.normalizedPin(response.tlsPin)
+        if let ticketPin = ticket.tlsCertPin, let responsePin, ticketPin != responsePin {
+            throw PairingLinkError.certificatePinMismatch
+        }
         return PairingCredentials(
             endpoint: try Self.validatedEndpoint(response.endpoint.isEmpty ? ticket.endpoint : response.endpoint),
             token: response.token,
             tailscaleDNSName: response.tailscaleDNSName,
-            tailscaleDeviceName: response.tailscaleDeviceName
+            tailscaleDeviceName: response.tailscaleDeviceName,
+            tlsCertPin: ticket.tlsCertPin
         )
     }
 
@@ -1501,7 +1533,11 @@ final class AppStore: ObservableObject {
                 throw PairingLinkError.expired
             }
         }
-        return PairingCredentials(endpoint: try validatedEndpoint(endpoint), token: token)
+        return PairingCredentials(
+            endpoint: try validatedEndpoint(endpoint),
+            token: token,
+            tlsCertPin: components?.queryItems?.first(where: { $0.name == "tls_pin" })?.value
+        )
     }
 
     static func pairingTicket(from url: URL) throws -> PairingTicket? {
@@ -1524,6 +1560,8 @@ final class AppStore: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let expiresAt = components?.queryItems?.first(where: { $0.name == "expires_at" })?.value?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let tlsPin = components?.queryItems?.first(where: { $0.name == "tls_pin" })?.value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !endpoint.isEmpty else {
             throw PairingLinkError.missingEndpoint
         }
@@ -1540,24 +1578,9 @@ final class AppStore: ObservableObject {
             endpoint: try validatedEndpoint(endpoint),
             issuedAt: issuedAt,
             expiresAt: expiresAt,
-            pairSignature: pairSignature
+            pairSignature: pairSignature,
+            tlsCertPin: tlsPin
         )
-    }
-
-    private static func pairingDate(from raw: String) -> Date? {
-        if let seconds = TimeInterval(raw) {
-            return Date(timeIntervalSince1970: seconds)
-        }
-        // agentd 为保证同一秒刷新出的短期票据仍可区分，会输出 RFC3339Nano 小数秒。
-        // 先解析新版格式，再回退到旧版无小数秒格式，保持已发布二维码兼容。
-        let fractionalFormatter = ISO8601DateFormatter()
-        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractionalFormatter.date(from: raw) {
-            return date
-        }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: raw)
     }
 
     static func validatedEndpoint(_ raw: String) throws -> String {
@@ -1591,7 +1614,8 @@ final class AppStore: ObservableObject {
                 installationID: normalizedInstallationID(profile.installationID),
                 hostPlatform: profile.hostPlatform,
                 connectionRoute: profile.connectionRoute,
-                revision: profile.revision
+                revision: profile.revision,
+                tlsCertPin: profile.tlsCertPin
             )
         }
     }
@@ -1623,7 +1647,8 @@ final class AppStore: ObservableObject {
         tailscaleDNSName: String?,
         tailscaleDeviceName: String?,
         hostDeviceName: String?,
-        adoptsHostDeviceName: Bool
+        adoptsHostDeviceName: Bool,
+        tlsCertPin: String? = nil
     ) async throws -> PreparedConnectionSettings {
         let deadline = Date().addingTimeInterval(hostSwitchPreparationTimeout)
         let client = AgentAPIClient(endpoint: activeEndpoint, token: token, session: agentAPISession)
@@ -1689,6 +1714,7 @@ final class AppStore: ObservableObject {
                     tailscaleDeviceName: refreshedDeviceName,
                     hostDeviceName: refreshedHostDeviceName,
                     hostPlatform: HostPlatform(serverValue: version.platform),
+                    tlsCertPin: tlsCertPin,
                     hostContext: PreparedHostContext(
                         lease: PreparedHostLease(
                             endpoint: activeEndpoint,

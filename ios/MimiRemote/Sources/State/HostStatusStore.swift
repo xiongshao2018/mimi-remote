@@ -71,7 +71,7 @@ final class HostStatusStore: ObservableObject {
         configuration.httpMaximumConnectionsPerHost = 1
         configuration.timeoutIntervalForRequest = 2
         configuration.timeoutIntervalForResource = 2
-        self.session = URLSession(configuration: configuration)
+        self.session = AgentTransport.session(configuration: configuration)
     }
 
     deinit {

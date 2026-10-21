@@ -1281,6 +1281,9 @@ struct PairingClaimRequest: Encodable, Equatable {
     let tailcatClientKey: String?
     let managedPairingSessionID: String?
     let managedPairingGrant: String?
+    /// 二维码带外下发的公网证书指纹。它必须回到票据里参与验签，所以原样上行；
+    /// agentd 按含指纹的规范签名校验，中间人抹掉或替换指纹都会让 claim 直接失败。
+    let tlsPin: String?
 
     init(
         endpoint: String,
@@ -1289,7 +1292,8 @@ struct PairingClaimRequest: Encodable, Equatable {
         pairSignature: String,
         tailcatClientKey: String? = nil,
         managedPairingSessionID: String? = nil,
-        managedPairingGrant: String? = nil
+        managedPairingGrant: String? = nil,
+        tlsPin: String? = nil
     ) {
         self.endpoint = endpoint
         self.issuedAt = issuedAt
@@ -1298,6 +1302,7 @@ struct PairingClaimRequest: Encodable, Equatable {
         self.tailcatClientKey = tailcatClientKey
         self.managedPairingSessionID = managedPairingSessionID
         self.managedPairingGrant = managedPairingGrant
+        self.tlsPin = TLSCertificatePinning.normalizedPin(tlsPin)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1308,6 +1313,7 @@ struct PairingClaimRequest: Encodable, Equatable {
         case tailcatClientKey = "tailcat_client_key"
         case managedPairingSessionID = "managed_pairing_session_id"
         case managedPairingGrant = "managed_pairing_grant"
+        case tlsPin = "tls_pin"
     }
 }
 
@@ -1317,6 +1323,9 @@ struct PairingClaimResponse: Decodable, Equatable {
     let tailscaleDNSName: String?
     let tailscaleDeviceName: String?
     let tailcatAddress: String?
+    /// agentd 当前公网证书指纹。手机用它核对扫码得到的指纹是否仍是同一张证书，
+    /// 不一致说明宿主换过证书或链路被替换，必须重新扫码而不是继续信任。
+    let tlsPin: String?
 
     enum CodingKeys: String, CodingKey {
         case endpoint
@@ -1324,6 +1333,7 @@ struct PairingClaimResponse: Decodable, Equatable {
         case tailscaleDNSName = "tailscale_dns_name"
         case tailscaleDeviceName = "tailscale_device_name"
         case tailcatAddress = "tailcat_address"
+        case tlsPin = "tls_pin"
     }
 }
 

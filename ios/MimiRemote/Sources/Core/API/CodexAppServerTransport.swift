@@ -164,7 +164,7 @@ final class URLSessionCodexAppServerTransport: CodexAppServerTransport {
     private var credentialFingerprint: String?
 
     init(
-        session: URLSession = .shared,
+        session: URLSession = AgentTransport.sharedSession,
         maximumMessageSize: Int = WebSocketMessageLimits.maximumInboundMessageBytes
     ) {
         self.session = session
