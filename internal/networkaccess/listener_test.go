@@ -46,6 +46,33 @@ func TestPolicyIndependentIngress(t *testing.T) {
 	}
 }
 
+func TestPolicyPublicChannelAcceptsAnySource(t *testing.T) {
+	// 公网直连没有可枚举的来源段：手机可能在蜂窝网络、可能在 NAT 后的私网，
+	// 只要不是本机 loopback 就应可达。Tailscale 与局域网开关保持原语义。
+	tests := []struct {
+		name, local, remote string
+		ts, lan, public     bool
+		want                bool
+	}{
+		{"public source with public on", "203.0.113.20", "198.51.100.3", false, false, true, true},
+		{"public source with public off", "203.0.113.20", "198.51.100.3", false, false, false, false},
+		{"nat private source via public listener", "203.0.113.20", "192.168.50.7", false, false, true, true},
+		{"public IPv6 source", "2001:db8::20", "2001:db8::7", false, false, true, true},
+		{"loopback still allowed without public", "127.0.0.1", "127.0.0.1", false, false, false, true},
+		{"external to loopback stays closed", "127.0.0.1", "198.51.100.3", false, false, true, false},
+		{"tailscale pair keeps needing its own switch", "100.64.0.2", "100.64.0.3", false, false, true, false},
+		{"tailscale pair with its switch on", "100.64.0.2", "100.64.0.3", true, false, false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := Policy{Tailscale: tt.ts, LAN: tt.lan, Public: tt.public}
+			if got := policy.Allows(net.ParseIP(tt.local), net.ParseIP(tt.remote)); got != tt.want {
+				t.Fatalf("Allows=%v want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 type testConn struct {
 	local, remote net.Addr
 	closed        bool

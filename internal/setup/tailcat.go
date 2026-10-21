@@ -162,7 +162,7 @@ func TailcatPairWithManagedHost(
 	now := time.Now().UTC()
 	expiresAt := now.Add(defaultPairingURLTTL)
 	endpoint := "http://127.0.0.1:8787"
-	rawPairURL := pairingURL(endpoint, cfg.Auth.Token, now, expiresAt)
+	rawPairURL := pairingURL(endpoint, cfg.Auth.Token, "", now, expiresAt)
 	parsed, err := url.Parse(rawPairURL)
 	if err != nil {
 		return Result{}, err

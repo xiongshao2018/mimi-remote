@@ -80,8 +80,26 @@ func unavailableModuleIPv6(address string, err error) bool {
 
 // moduleIngressPolicy 是模块控制下每个 accept 的连接都要通过的入口策略，与
 // moduleListenAddresses 共用同一份开关推导，避免监听集合与策略分叉。
+//
+// 公网模块不在这里出现：它有自己的 TLS 监听（publicListenAddress），明文监听
+// 不因公网开启而放宽来源，否则 Token 会以明文跨公网被窃听。
 func moduleIngressPolicy(cfg config.Config) networkaccess.Policy {
 	return networkaccess.Policy{Tailscale: cfg.TailscaleAccessEnabled(), LAN: cfg.LANAccessEnabled()}
+}
+
+// publicListenAddress 返回公网 TLS 监听的绑定地址；公网模块关闭时返回空串。
+// 它独立于 cfg.Listen 的明文监听，因此公网入口永远是 HTTPS。
+func publicListenAddress(cfg config.Config) string {
+	if !cfg.PublicAccessEnabled() {
+		return ""
+	}
+	return cfg.PublicListenAddress()
+}
+
+// publicIngressPolicy 只用在公网 TLS 监听上。手机从任意网络按公网地址连进来，
+// 来源无法预先枚举，真正的信任依据是指纹校验后的 HTTPS，而不是来源 IP。
+func publicIngressPolicy() networkaccess.Policy {
+	return networkaccess.Policy{Public: true}
 }
 
 // boundIPv6Loopback 判断配置里绑定的主机名是不是 IPv6 loopback（含未加方括号的写法）。

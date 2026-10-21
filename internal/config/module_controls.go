@@ -59,4 +59,15 @@ type ModuleStatus struct {
 	LANEnabled         bool `json:"lan_enabled"`
 	TailscaleAvailable bool `json:"tailscale_available"`
 	LANAvailable       bool `json:"lan_available"`
+	// PublicEnabled 是「公网 IP 直连」模块的当前开关。它独立于 Tailscale 与局域网，
+	// 开启后 agentd 额外监听一个 HTTPS 端口，公网入口永远不是明文 HTTP。
+	PublicEnabled bool `json:"public_enabled"`
+	// PublicAvailable 表示公网入口现在真的能给出配对地址（已 advertise 或网卡可见公网地址）。
+	// 客户端据此区分「开关已开但地址还没配好」，不要把不可用的入口显示成可连接。
+	PublicAvailable bool `json:"public_available"`
+	// PublicEndpoint 是手机要连的公网 HTTPS 地址，未配置时为空。
+	PublicEndpoint string `json:"public_endpoint,omitempty"`
+	// PublicFingerprint 来自运行中的公网监听，不是磁盘快照。手机可用它核对
+	// 配对时拿到的证书指纹是否仍然一致。
+	PublicFingerprint string `json:"public_fingerprint,omitempty"`
 }

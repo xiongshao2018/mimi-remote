@@ -88,6 +88,8 @@ func run(args []string) error {
 		return runTailcat(args)
 	case "network":
 		return runNetwork(args)
+	case "public":
+		return runPublic(args)
 	case "runtime":
 		return runRuntime(args)
 	case "repair-codex-session":
@@ -103,7 +105,7 @@ func run(args []string) error {
 	case "serve":
 		return runServe(args)
 	default:
-		return fmt.Errorf("未知命令 %q，可用命令：up、setup、start、restart、stop、status、logs、pair、tailcat、network、runtime、repair-codex-session、codex-front、serve、doctor、diagnostics、check-config、version", cmd)
+		return fmt.Errorf("未知命令 %q，可用命令：up、setup、start、restart、stop、status、logs、pair、tailcat、network、public、runtime、repair-codex-session、codex-front、serve、doctor、diagnostics、check-config、version", cmd)
 	}
 }
 
@@ -1098,9 +1100,24 @@ func serve(cfg config.Config, registry *projects.Registry, checker *doctor.Check
 		}
 		listeners = append(listeners, listener)
 	}
+	// 公网 HTTPS 入口在明文监听之后准备：证书失败时明文通道仍可用，
+	// 但如果这是唯一的外部入口就必须让启动失败，否则手机会连上一个「看似在跑」的主机。
+	public, publicErr := openPublicTLSListener(cfg, checker.ConfigPath())
+	if publicErr != nil {
+		if publicTLSFailureIsFatal(cfg) {
+			for _, opened := range listeners {
+				_ = opened.Close()
+			}
+			_ = shutdownServeResources(apiRouter, appServerRuntime)
+			return publicErr
+		}
+		log.Printf("公网 HTTPS 入口未启动：%v", publicErr)
+	} else if public.Listener != nil {
+		apiRouter.SetTLSFingerprint(public.Fingerprint)
+	}
 	maybePrintServeConnection(os.Stdout, agentsetup.ResultFromConfig(context.Background(), "", cfg))
 
-	errCh := make(chan error, len(listeners)+1)
+	errCh := make(chan error, len(listeners)+2)
 	for _, listener := range listeners {
 		listener := listener
 		go func() {
@@ -1108,6 +1125,7 @@ func serve(cfg config.Config, registry *projects.Registry, checker *doctor.Check
 			errCh <- server.Serve(listener)
 		}()
 	}
+	servePublicTLSListener(server, public, errCh)
 	appServerRuntime.watch(errCh)
 	stopCh := make(chan os.Signal, 1)
 	stopSignals := notifyServeSignals(stopCh)
@@ -1636,6 +1654,7 @@ func printSetupResult(w io.Writer, result agentsetup.Result) {
 	if result.PairExpiresAt != "" {
 		fmt.Fprintf(w, "二维码有效期至：%s\n", result.PairExpiresAt)
 	}
+	printTLSPin(w, result)
 	if result.AppServerSSHTarget != "" {
 		fmt.Fprintf(w, "app-server SSH target：%s\n", result.AppServerSSHTarget)
 	}
@@ -1656,8 +1675,18 @@ func printPairResult(w io.Writer, result agentsetup.Result) {
 	if result.PairExpiresAt != "" {
 		fmt.Fprintf(w, "二维码有效期至：%s\n", result.PairExpiresAt)
 	}
+	printTLSPin(w, result)
 	printConnectionQRCode(w, result.PairURL)
 	printWarnings(w, result.Warnings)
+}
+
+// printTLSPin 只在公网直连时打印证书指纹。手机按 IP 连上自签证书时，
+// 系统信任链无法给出任何判断，这个指纹就是用户能肉眼核对的唯一凭据。
+func printTLSPin(w io.Writer, result agentsetup.Result) {
+	if strings.TrimSpace(result.TLSPin) == "" {
+		return
+	}
+	fmt.Fprintf(w, "公网证书指纹(SHA-256, base64)：%s\n", result.TLSPin)
 }
 
 type qrOnlyPairOutput struct {
@@ -1667,7 +1696,10 @@ type qrOnlyPairOutput struct {
 	TailscaleDeviceName string                    `json:"tailscale_device_name,omitempty"`
 	PairURL             string                    `json:"pair_url"`
 	PairExpiresAt       string                    `json:"pair_expires_at"`
-	Warnings            []string                  `json:"warnings,omitempty"`
+	// TLSPin 是公网直连才有的证书指纹。它不是凭据，但必须与二维码同时出现，
+	// 手机才敢信任一张不在系统信任链里的自签证书。
+	TLSPin   string   `json:"tls_pin,omitempty"`
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func qrOnlyPairResult(result agentsetup.Result) qrOnlyPairOutput {
@@ -1679,6 +1711,7 @@ func qrOnlyPairResult(result agentsetup.Result) qrOnlyPairOutput {
 		TailscaleDeviceName: result.TailscaleDeviceName,
 		PairURL:             result.PairURL,
 		PairExpiresAt:       result.PairExpiresAt,
+		TLSPin:              result.TLSPin,
 		Warnings:            result.Warnings,
 	}
 }
@@ -1689,6 +1722,9 @@ func printQROnlyPairResult(w io.Writer, result agentsetup.Result) {
 	fmt.Fprintf(w, "配对链接：%s\n", safeResult.PairURL)
 	if safeResult.PairExpiresAt != "" {
 		fmt.Fprintf(w, "二维码有效期至：%s\n", safeResult.PairExpiresAt)
+	}
+	if safeResult.TLSPin != "" {
+		fmt.Fprintf(w, "公网证书指纹(SHA-256, base64)：%s\n", safeResult.TLSPin)
 	}
 	printConnectionQRCode(w, safeResult.PairURL)
 	printWarnings(w, safeResult.Warnings)

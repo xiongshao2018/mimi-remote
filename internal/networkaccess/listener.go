@@ -10,7 +10,10 @@ import (
 	"github.com/gaixianggeng/mimi-remote/internal/tailscaleinfo"
 )
 
-type Policy struct{ Tailscale, LAN bool }
+// Policy 是每条 accept 都要通过的入口通道开关。Public 是「公网 IP 直连」通道：
+// 手机在任意网络里按公网地址连进来，来源地址无法预先枚举，因此只按监听器归属放行，
+// 真正的信任依据是 HTTPS + 配对时下发的证书指纹，不是来源 IP。
+type Policy struct{ Tailscale, LAN, Public bool }
 
 func IsTailscaleIPv4(ip net.IP) bool {
 	v4 := ip.To4()
@@ -38,6 +41,12 @@ func (p Policy) Allows(local, remote net.IP) bool {
 	}
 	if isTailscaleAddress(local) || isTailscaleAddress(remote) {
 		return p.Tailscale && isTailscaleAddress(local) && isTailscaleAddress(remote)
+	}
+	if p.Public && !local.IsLoopback() {
+		// 公网通道开启后，任何非本机来源都可达：NAT 后的私网来源同样从这张
+		// 公网监听进来，等价于同时覆盖局域网通道。绑定在 loopback 上的监听
+		// 不属于公网通道，来源约束保持原语义。
+		return true
 	}
 	return p.LAN && local.To4() != nil && remote.To4() != nil &&
 		local.IsPrivate() && remote.IsPrivate() && !local.IsLoopback() && !remote.IsLoopback()

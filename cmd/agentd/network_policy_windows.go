@@ -41,3 +41,10 @@ func ensurePlatformLANAccessAllowed() error {
 	}
 	return nil
 }
+
+// ensurePlatformPublicAccessAllowed 在 Windows 上先拒绝公网直连，而不是让它静默不可达。
+// 安装器只为 agentd.exe 建立 Private/LocalSubnet 入站规则，公网来源落在 Public 配置文件里，
+// 会被同一条规则的 scope 挡掉；这里 fail-fast 比手机连不上后再猜原因更有用。
+func ensurePlatformPublicAccessAllowed() error {
+	return fmt.Errorf("Windows 暂不支持公网 IP 直连：安装器只放行 Private/LocalSubnet 入站来源，公网来源会被防火墙挡掉；请在 Tailscale 或局域网通道下配对")
+}

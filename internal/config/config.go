@@ -90,6 +90,9 @@ type NetworkConfig struct {
 	AllowLAN bool `json:"allow_lan"`
 	// nil preserves legacy listen semantics; a value opts into independent Mimi ingress controls.
 	AllowTailscale *bool `json:"allow_tailscale,omitempty"`
+	// Public 是「公网 IP 直连」模块：不依赖 Tailscale，手机从任意网络按公网地址连进来。
+	// nil 表示这台主机从未开启过公网，监听与入口策略都不会新增公网通道。
+	Public *PublicAccessConfig `json:"public,omitempty"`
 }
 
 type AuthConfig struct {

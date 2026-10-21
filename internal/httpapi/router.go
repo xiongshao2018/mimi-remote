@@ -29,8 +29,12 @@ import (
 )
 
 type Router struct {
-	cfg            config.Config
-	configPath     string
+	cfg        config.Config
+	configPath string
+	// tlsFingerprint 是公网 TLS 监听实际出示的证书指纹（base64 SHA-256 of DER）。
+	// 它由 serve 层在证书准备完成后注入：配置里的 cfg 是启动快照，证书可能在本次
+	// 启动里刚重新生成，不能从 cfg 推导。空值表示没有公网入口。
+	tlsFingerprint string
 	projects       *projects.Registry
 	doctor         *doctor.Checker
 	auth           auth.Authenticator
@@ -343,6 +347,12 @@ func (r *Router) EnableHostDeviceName() {
 	}
 	resolver := hostinfo.NewResolver(time.Minute)
 	r.hostDeviceNameLookup = resolver.Lookup
+}
+
+// SetTLSFingerprint 注入公网证书指纹，供 /api/pair/claim 回显给手机核对。
+// 只在 serve 准备完证书后调用一次；空串表示这台主机没有公网 HTTPS 入口。
+func (r *Router) SetTLSFingerprint(fingerprint string) {
+	r.tlsFingerprint = strings.TrimSpace(fingerprint)
 }
 
 // Shutdown releases the long-lived runtimes the router started. Call it after

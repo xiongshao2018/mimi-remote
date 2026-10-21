@@ -224,11 +224,11 @@ func TestPairingURLRefreshCreatesDistinctTicketsAndKeepsPriorValidUntilOwnExpiry
 	refreshedIssuedAt := firstIssuedAt.Add(30 * time.Second)
 	first := pairingTicketFromURL(
 		t,
-		pairingURL(endpoint, secret, firstIssuedAt, firstIssuedAt.Add(defaultPairingURLTTL)),
+		pairingURL(endpoint, secret, "", firstIssuedAt, firstIssuedAt.Add(defaultPairingURLTTL)),
 	)
 	refreshed := pairingTicketFromURL(
 		t,
-		pairingURL(endpoint, secret, refreshedIssuedAt, refreshedIssuedAt.Add(defaultPairingURLTTL)),
+		pairingURL(endpoint, secret, "", refreshedIssuedAt, refreshedIssuedAt.Add(defaultPairingURLTTL)),
 	)
 
 	if first.Signature == refreshed.Signature {
@@ -285,6 +285,7 @@ func pairingTicketFromURL(t *testing.T, rawURL string) auth.PairingTicket {
 		IssuedAt:  query.Get("issued_at"),
 		ExpiresAt: query.Get("expires_at"),
 		Signature: query.Get("pair_sig"),
+		TLSPin:    query.Get("tls_pin"),
 	}
 }
 

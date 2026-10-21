@@ -16,10 +16,13 @@ const (
 )
 
 type pairingClaimRequest struct {
-	Endpoint         string `json:"endpoint"`
-	IssuedAt         string `json:"issued_at"`
-	ExpiresAt        string `json:"expires_at"`
-	Signature        string `json:"pair_sig"`
+	Endpoint  string `json:"endpoint"`
+	IssuedAt  string `json:"issued_at"`
+	ExpiresAt string `json:"expires_at"`
+	Signature string `json:"pair_sig"`
+	// TLSPin 是二维码里带外下发的公网证书指纹。它必须回到票据里参与验签，
+	// 否则中间人可以在 claim 请求上把指纹换成自己的证书。
+	TLSPin           string `json:"tls_pin,omitempty"`
 	TailcatClientKey string `json:"tailcat_client_key,omitempty"`
 	ManagedSessionID string `json:"managed_pairing_session_id,omitempty"`
 	ManagedGrant     string `json:"managed_pairing_grant,omitempty"`
@@ -31,6 +34,9 @@ type pairingClaimResponse struct {
 	TailscaleDNSName    string `json:"tailscale_dns_name,omitempty"`
 	TailscaleDeviceName string `json:"tailscale_device_name,omitempty"`
 	TailcatAddress      string `json:"tailcat_address,omitempty"`
+	// TLSPin 回显 agentd 当前公网证书指纹，让手机能核对扫码得到的指纹是否仍是同一张。
+	// 空值表示这台主机没有公网 TLS 入口，旧客户端忽略该字段即可。
+	TLSPin string `json:"tls_pin,omitempty"`
 }
 
 func (r *Router) localPairingClaimHandler(w http.ResponseWriter, req *http.Request) {
@@ -95,6 +101,7 @@ func (r *Router) pairingClaimHandler(w http.ResponseWriter, req *http.Request) {
 		IssuedAt:  payload.IssuedAt,
 		ExpiresAt: payload.ExpiresAt,
 		Signature: payload.Signature,
+		TLSPin:    payload.TLSPin,
 	}
 	now := time.Now().UTC()
 	if err := auth.ValidatePairingTicket(r.cfg.Auth.Token, ticket, now); err != nil {
@@ -116,6 +123,7 @@ func (r *Router) pairingClaimHandler(w http.ResponseWriter, req *http.Request) {
 	response := pairingClaimResponse{
 		Endpoint: strings.TrimSpace(payload.Endpoint),
 		Token:    token,
+		TLSPin:   r.tlsFingerprint,
 	}
 	if publicKey := strings.TrimSpace(payload.TailcatClientKey); publicKey != "" {
 		if r.tailcat == nil {

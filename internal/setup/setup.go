@@ -54,10 +54,13 @@ type Result struct {
 	PairURL             string         `json:"pair_url"`
 	PairIssuedAt        string         `json:"pair_issued_at"`
 	PairExpiresAt       string         `json:"pair_expires_at"`
-	ScanRoot            string         `json:"scan_root"`
-	BrowseRoot          string         `json:"browse_root"`
-	AppServerSSHTarget  string         `json:"app_server_ssh_target"`
-	Warnings            []string       `json:"warnings"`
+	// TLSPin 是公网 HTTPS 入口的证书指纹（base64 SHA-256 of certificate DER）。
+	// 只有公网直连才有值：自签证书不在手机信任链里，指纹是唯一的信任依据。
+	TLSPin             string   `json:"tls_pin,omitempty"`
+	ScanRoot           string   `json:"scan_root"`
+	BrowseRoot         string   `json:"browse_root"`
+	AppServerSSHTarget string   `json:"app_server_ssh_target"`
+	Warnings           []string `json:"warnings"`
 }
 
 func Run(ctx context.Context, options Options) (Result, error) {
@@ -423,6 +426,15 @@ func resultFromConfigForNetwork(
 	}
 	now := time.Now().UTC()
 	expiresAt := now.Add(defaultPairingURLTTL)
+	// 公网直连必须把证书指纹一起带出去。二维码是手机唯一的带外信道，
+	// 指纹不签进配对票据，链路上的中间人就能换成自己那张自签证书。
+	pin := ""
+	if pairingNetworkForEndpoint(endpoint) == PairingNetworkPublic {
+		pin, err = publicTLSPin(configPath, cfg, lookups)
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	return Result{
 		ConfigPath:          configPath,
 		Endpoint:            endpoint,
@@ -430,8 +442,9 @@ func resultFromConfigForNetwork(
 		TailscaleDNSName:    host.DNSName,
 		TailscaleDeviceName: host.DeviceName,
 		Token:               token,
-		ConnectURL:          connectionURL("connect", endpoint, token, now, expiresAt),
-		PairURL:             pairingURL(endpoint, token, now, expiresAt),
+		TLSPin:              pin,
+		ConnectURL:          connectionURL("connect", endpoint, token, pin, now, expiresAt),
+		PairURL:             pairingURL(endpoint, token, pin, now, expiresAt),
 		PairIssuedAt:        now.Format(time.RFC3339),
 		PairExpiresAt:       expiresAt.Format(time.RFC3339),
 		ScanRoot:            scanRoot,
@@ -441,10 +454,13 @@ func resultFromConfigForNetwork(
 	}, nil
 }
 
-func connectionURL(route, endpoint, token string, issuedAt, expiresAt time.Time) string {
+func connectionURL(route, endpoint, token string, pin string, issuedAt, expiresAt time.Time) string {
 	values := url.Values{}
 	values.Set("endpoint", endpoint)
 	values.Set("token", token)
+	if pin != "" {
+		values.Set("tls_pin", pin)
+	}
 	if !issuedAt.IsZero() {
 		values.Set("issued_at", issuedAt.UTC().Format(time.RFC3339))
 	}
@@ -454,13 +470,16 @@ func connectionURL(route, endpoint, token string, issuedAt, expiresAt time.Time)
 	return "mimiremote://" + route + "?" + values.Encode()
 }
 
-func pairingURL(endpoint, token string, issuedAt, expiresAt time.Time) string {
-	ticket := auth.NewPairingTicket(endpoint, token, issuedAt, expiresAt)
+func pairingURL(endpoint, token, pin string, issuedAt, expiresAt time.Time) string {
+	ticket := auth.NewPairingTicketWithPin(endpoint, token, pin, issuedAt, expiresAt)
 	values := url.Values{}
 	values.Set("endpoint", ticket.Endpoint)
 	values.Set("issued_at", ticket.IssuedAt)
 	values.Set("expires_at", ticket.ExpiresAt)
 	values.Set("pair_sig", ticket.Signature)
+	if ticket.TLSPin != "" {
+		values.Set("tls_pin", ticket.TLSPin)
+	}
 	return "mimiremote://pair?" + values.Encode()
 }
 

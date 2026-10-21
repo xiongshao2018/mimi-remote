@@ -22,7 +22,13 @@ func modulePairingEndpoint(ctx context.Context, cfg config.Config, network Pairi
 			}
 		}
 		if cfg.LANAccessEnabled() {
-			return modulePairingEndpoint(ctx, cfg, PairingNetworkLAN, lookups)
+			if endpoint, warnings, err := modulePairingEndpoint(ctx, cfg, PairingNetworkLAN, lookups); err == nil {
+				return endpoint, warnings, nil
+			}
+		}
+		// 没有 Tailscale、局域网也不可用时，公网直连是最后一条能出二维码的路。
+		if cfg.PublicAccessEnabled() {
+			return modulePairingEndpoint(ctx, cfg, PairingNetworkPublic, lookups)
 		}
 		return "", nil, noPairingNetworkError(runtime.GOOS)
 	}
@@ -45,6 +51,11 @@ func modulePairingEndpoint(ctx context.Context, cfg config.Config, network Pairi
 			return "", nil, fmt.Errorf("未检测到可用的局域网 IPv4，请连接 Wi-Fi 或以太网")
 		}
 		return httpEndpoint(host, port), []string{"仅用于受信任的局域网；仍需 Mimi 配对鉴权"}, nil
+	case PairingNetworkPublic:
+		if !cfg.PublicAccessEnabled() {
+			return "", nil, fmt.Errorf("公网直连已在 Mimi 中关闭")
+		}
+		return publicPairingEndpoint(cfg, lookups)
 	default:
 		return "", nil, fmt.Errorf("不支持的配对网络 %q", network)
 	}
@@ -56,5 +67,5 @@ func noPairingNetworkError(goos string) error {
 	if goos == "windows" {
 		return fmt.Errorf("没有可用的 Tailscale 或局域网连接；可以在托盘控制面板开启 Tailcat（或运行 agentd tailcat enable）后用 Tailcat 配对，也可以安装并登录 Tailscale 后运行 agentd network --tailscale-enabled=true 和 agentd restart，或重新运行安装器并勾选局域网访问")
 	}
-	return fmt.Errorf("没有可用的 Tailscale 或局域网连接；请启用连接方式或使用 Tailcat 配对")
+	return fmt.Errorf("没有可用的 Tailscale 或局域网连接；可以运行 agentd public --enabled=true --advertise <公网IP> 开启公网直连，或启用连接方式、使用 Tailcat 配对")
 }

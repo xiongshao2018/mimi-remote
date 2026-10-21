@@ -68,3 +68,45 @@ func TestPairingTicketUsesSubsecondPrecisionAndAcceptsLegacyTimestamp(t *testing
 		t.Fatalf("升级后仍应接受有效的旧 RFC3339 票据：%v", err)
 	}
 }
+
+func TestPairingTicketPinIsSignedAndFailClosed(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	expires := now.Add(5 * time.Minute)
+	const secret = "token"
+	const endpoint = "https://203.0.113.9:8443"
+	const pin = "9hEnw7pLl6lGj8sKk0nM5tq3rVQz1bC7dYfXa2eWuio="
+
+	ticket := NewPairingTicketWithPin(endpoint, secret, pin, now, expires)
+	if err := ValidatePairingTicket(secret, ticket, now); err != nil {
+		t.Fatalf("带指纹的票据应通过验签：%v", err)
+	}
+
+	// 中间人抹掉 tls_pin：签名字段是按含指纹的规范算出来的，旧格式验签必须失败。
+	stripped := ticket
+	stripped.TLSPin = ""
+	if err := ValidatePairingTicket(secret, stripped, now); err == nil {
+		t.Fatal("抹掉证书指纹后必须拒绝")
+	}
+
+	// 中间人换成自己的指纹：没有 Token 就算不出新签名。
+	swapped := ticket
+	swapped.TLSPin = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	if err := ValidatePairingTicket(secret, swapped, now); err == nil {
+		t.Fatal("替换证书指纹后必须拒绝")
+	}
+
+	// 旧版本生成的三字段票据继续可验，公网模块上线不能打断既有配对。
+	legacy := NewPairingTicket(endpoint, secret, now, expires)
+	if legacy.TLSPin != "" {
+		t.Fatal("无公网入口时不应带指纹")
+	}
+	if err := ValidatePairingTicket(secret, legacy, now); err != nil {
+		t.Fatalf("旧格式票据应继续通过：%v", err)
+	}
+	if err := ValidatePairingTicket(secret, PairingTicket{
+		Endpoint: legacy.Endpoint, IssuedAt: legacy.IssuedAt, ExpiresAt: legacy.ExpiresAt,
+		Signature: legacy.Signature, TLSPin: pin,
+	}, now); err == nil {
+		t.Fatal("旧格式签名不能配上新格式指纹")
+	}
+}

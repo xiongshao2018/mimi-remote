@@ -19,12 +19,16 @@ const (
 	PairingNetworkAuto      PairingNetwork = "auto"
 	PairingNetworkTailscale PairingNetwork = "tailscale"
 	PairingNetworkLAN       PairingNetwork = "lan"
+	// PairingNetworkPublic 是不依赖 Tailscale 的公网 IP 直连。它总是 HTTPS，
+	// 信任依据是配对二维码里带外下发的证书指纹，不是 CA，也不是来源 IP。
+	PairingNetworkPublic PairingNetwork = "public"
 )
 
 type pairingNetworkLookups struct {
 	tailscaleIP   func(context.Context) string
 	tailscaleHost func(context.Context) tailscaleinfo.Host
 	lanIP         func() string
+	publicIP      func() string
 }
 
 func defaultPairingNetworkLookups() pairingNetworkLookups {
@@ -32,6 +36,7 @@ func defaultPairingNetworkLookups() pairingNetworkLookups {
 		tailscaleIP:   firstTailscaleIP,
 		tailscaleHost: tailscaleinfo.Discover,
 		lanIP:         firstLANIPv4,
+		publicIP:      firstPublicIPv4,
 	}
 }
 
@@ -41,10 +46,10 @@ func ParsePairingNetwork(raw string) (PairingNetwork, error) {
 		network = PairingNetworkAuto
 	}
 	switch network {
-	case PairingNetworkAuto, PairingNetworkTailscale, PairingNetworkLAN:
+	case PairingNetworkAuto, PairingNetworkTailscale, PairingNetworkLAN, PairingNetworkPublic:
 		return network, nil
 	default:
-		return "", fmt.Errorf("配对网络只支持 auto、tailscale 或 lan，实际为 %q", raw)
+		return "", fmt.Errorf("配对网络只支持 auto、tailscale、lan 或 public，实际为 %q", raw)
 	}
 }
 
@@ -85,6 +90,8 @@ func pairingEndpoint(
 				return httpEndpoint(host, port), nil, nil
 			}
 			return pairingEndpoint(ctx, cfg, PairingNetworkLAN, lookups)
+		case cfg.PublicAccessEnabled():
+			return publicPairingEndpoint(cfg, lookups)
 		default:
 			endpoint, warnings := endpointForListen(ctx, cfg.Listen)
 			return endpoint, warnings, nil
@@ -128,6 +135,12 @@ func pairingEndpoint(
 			return "", nil, fmt.Errorf("未检测到可用的局域网 IPv4，请确认这台电脑已连接 Wi-Fi 或以太网")
 		}
 		return httpEndpoint(host, port), []string{"局域网配对仅适用于与这台电脑位于同一局域网的设备"}, nil
+
+	case PairingNetworkPublic:
+		if !cfg.PublicAccessEnabled() {
+			return "", nil, fmt.Errorf("公网直连尚未开启；请先执行 agentd public --enabled=true")
+		}
+		return publicPairingEndpoint(cfg, lookups)
 	}
 
 	return "", nil, fmt.Errorf("不支持的配对网络 %q", network)
@@ -141,6 +154,10 @@ func pairingNetworkForEndpoint(endpoint string) PairingNetwork {
 	parsed, err := url.Parse(strings.TrimSpace(endpoint))
 	if err != nil {
 		return ""
+	}
+	// 只有公网直连模块产出 https Endpoint；明文 http 一律按 Tailscale/局域网判定。
+	if strings.EqualFold(parsed.Scheme, "https") {
+		return PairingNetworkPublic
 	}
 	ip := net.ParseIP(strings.Trim(parsed.Hostname(), "[]"))
 	switch {
