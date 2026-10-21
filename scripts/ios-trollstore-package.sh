@@ -141,6 +141,49 @@ entitlements_for_bundle() {
   esac
 }
 
+# Frameworks/ 里的 Mach-O 单独签：工具链会在这里放 Swift 回部署库
+# （例如 libswift_Concurrency.dylib），未签名的 dylib 会让 dyld 在启动时报
+# "code signature invalid"。这类库不需要 entitlement，用 ldid -S 直接签。
+sign_nested_macho() {
+  local target="$1"
+  local executable=""
+  if [[ -d "$target" ]]; then
+    local framework_name
+    framework_name="$(basename "$target")"
+    if [[ -f "$target/Info.plist" ]]; then
+      local info_executable
+      info_executable="$(plist_print "$target/Info.plist" CFBundleExecutable || true)"
+      [[ -n "$info_executable" ]] && executable="$target/$info_executable"
+    fi
+    [[ -x "$executable" ]] || executable="$target/${framework_name%.framework}"
+  else
+    executable="$target"
+  fi
+  if [[ ! -x "$executable" ]]; then
+    printf '  跳过（找不到可执行文件）%s\n' "$target"
+    return 0
+  fi
+
+  rm -rf "$target/_CodeSignature"
+  ldid -S "$executable" || fail "ldid 签名失败：$executable"
+  local cdhash
+  cdhash="$(ldid -h "$executable")" || fail "签名校验失败：$executable"
+  [[ -n "$cdhash" ]] || fail "签名后读不到 CDHash：$executable"
+  printf '  已签名 %-46s CDHash=%s\n' "$(basename "$target")" "${cdhash:0:16}"
+}
+
+sign_nested_machos_in() {
+  local bundle="$1"
+  local frameworks_dir="$bundle/Frameworks"
+  [[ -d "$frameworks_dir" ]] || return 0
+  while IFS= read -r nested; do
+    sign_nested_macho "$nested"
+  done < <(
+    find "$frameworks_dir" -maxdepth 1 \
+      \( \( -type d -name '*.framework' \) -o \( -type f -name '*.dylib' \) \) | sort
+  )
+}
+
 sign_bundle() {
   local bundle="$1"
   local info_plist="$bundle/Info.plist"
@@ -156,6 +199,9 @@ sign_bundle() {
   filtered="$TEMPORARY_DIR/entitlements/$(basename "$bundle").plist"
   mkdir -p "$TEMPORARY_DIR/entitlements"
   filter_entitlements "$entitlements" "$filtered" || fail "生成 entitlements 失败：$bundle"
+
+  # 先签内层再签外层：外层签名的 CDHash 覆盖不到内层，顺序反了不会报错但会漏签。
+  sign_nested_machos_in "$bundle"
 
   # 旧签名目录会和 ldid 写在 Mach-O 内的签名并存，TrollStore 会读到过期校验信息。
   rm -rf "$bundle/_CodeSignature"

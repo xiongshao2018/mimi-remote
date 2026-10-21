@@ -46,7 +46,9 @@ bash ./scripts/ios-trollstore-package.sh ~/Downloads/MimiRemote-trollstore-unsig
 1. 解出 `Payload/MimiRemote.app`；
 2. 按 bundle id 选择仓库里的 entitlement 来源，剥掉 `aps-environment` 与 `com.apple.developer.*`
    这类需要 Apple 描述文件的键，**保留 App Group**（否则 `UserDefaults(suiteName:)` 返回 nil）；
-3. 先签两个内置扩展（推送、小组件），再签主 App，全部用 `ldid -S<entitlements>`；
+3. 先签 `Frameworks/` 里的内层 Mach-O（工具链在这里放 Swift 回部署库，未签名的 dylib 会让
+   dyld 报 `code signature invalid`，这类库不带 entitlement），再签两个内置扩展（推送、小组件），
+   最后签主 App，bundle 一律用 `ldid -S<entitlements>`；
 4. 清掉可能残留的 `_CodeSignature` 目录，重新 zip 成 `MimiRemote-<版本>-trollstore.ipa`，打印 SHA-256。
 
 依赖 `python3`、`unzip`、`zip`、`ldid`。确认本机 TrollStore 会注入描述文件时，可用
