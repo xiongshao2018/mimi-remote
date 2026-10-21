@@ -23,7 +23,7 @@ struct NewSessionSheet: View {
         NavigationStack {
             Group {
                 if sessionStore.sidebarProjects.isEmpty {
-                    ContentUnavailableView {
+                    CompatContentUnavailableView {
                         Label(L10n.text("ui.no_workspace_yet"), systemImage: "folder.badge.plus")
                     } description: {
                         Text(L10n.text("ui.first_open_a_project_directory_on_your_mac"))
@@ -58,7 +58,7 @@ struct NewSessionSheet: View {
                         .padding(.bottom, 32)
                         .frame(maxWidth: .infinity, alignment: .top)
                     }
-                    .scrollBounceBehavior(.basedOnSize)
+                    .compatScrollBounceBehavior(.basedOnSize)
                     .background(tokens.background)
                 }
             }
@@ -100,13 +100,13 @@ struct NewSessionSheet: View {
             synchronizeWorkspaceSelection()
             normalizeRuntimeSelection()
         }
-        .onChange(of: sessionStore.sidebarProjects.map(\.id)) { _, _ in
+        .onChange(of: sessionStore.sidebarProjects.map(\.id)) {_ in
             synchronizeWorkspaceSelection()
         }
-        .onChange(of: sessionStore.availableRuntimeProviders) { _, _ in
+        .onChange(of: sessionStore.availableRuntimeProviders) {_ in
             normalizeRuntimeSelection()
         }
-        .onChange(of: sessionStore.selectedSessionID) { _, sessionID in
+        .onChange(of: sessionStore.selectedSessionID) {sessionID in
             guard isCreating,
                   let sessionID,
                   sessionID.hasPrefix("local:") else { return }

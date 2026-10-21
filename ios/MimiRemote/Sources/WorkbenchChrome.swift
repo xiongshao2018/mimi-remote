@@ -1159,7 +1159,8 @@ struct SessionInspectorPresentation: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if layout.usesAttachedInspector {
+        // `inspector` 与 `inspectorColumnWidth` 都是 iOS 17；16.2 用同一套 Sheet 内容承接。
+        if layout.usesAttachedInspector, #available(iOS 17.0, *) {
             content.inspector(isPresented: $isPresented) {
                 Group {
                     if let relatedSubagent, let parentSessionID {
@@ -1197,8 +1198,9 @@ struct SessionInspectorPresentation: ViewModifier {
         case .systemSheet:
             inspectorSheet
         case .zoom(let sourceID):
-            inspectorSheet.navigationTransition(
-                .zoom(sourceID: sourceID, in: presentationNamespace)
+            inspectorSheet.compatZoomTransition(
+                sourceID: sourceID,
+                in: presentationNamespace
             )
         }
     }
@@ -1310,7 +1312,7 @@ struct RelatedSessionConversationView: View {
                     if isLoading {
                         LoadingStateView(message: L10n.text("ui.loading"))
                     } else if didFailToLoad && childSession == nil {
-                        ContentUnavailableView(
+                        CompatContentUnavailableView(
                             L10n.text("ui.sub_agent"),
                             systemImage: "exclamationmark.triangle",
                             description: Text(L10n.text("ui.sub_agent_unavailable"))
@@ -1318,7 +1320,7 @@ struct RelatedSessionConversationView: View {
                     }
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { geometry in
+            .compatOnGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.width
             } action: { newWidth in
                 guard newWidth > 0, measuredContentWidth != newWidth else { return }
@@ -1514,7 +1516,7 @@ struct SessionNavigationMaterialModifier: ViewModifier {
                     usesCompactNavigation ? tokens.inputBackground : tokens.conversationCanvasBackground,
                     for: .navigationBar
                 )
-                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+                .compatToolbarBackgroundVisibility(.visible, for: .navigationBar)
                 .toolbarColorScheme(colorScheme, for: .navigationBar)
         } else if #available(iOS 26.0, *) {
             content
@@ -1529,7 +1531,7 @@ struct SessionNavigationMaterialModifier: ViewModifier {
             content
                 // 旧系统没有 scroll edge blur，继续用一层完整 Material 保证可读性。
                 .toolbarBackground(WorkbenchMaterial.surface, for: .navigationBar)
-                .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+                .compatToolbarBackgroundVisibility(.visible, for: .navigationBar)
                 .toolbarColorScheme(colorScheme, for: .navigationBar)
         } else {
             // 会话详情的宽屏导航边缘与正文共用同一画布，避免滚动到边缘时

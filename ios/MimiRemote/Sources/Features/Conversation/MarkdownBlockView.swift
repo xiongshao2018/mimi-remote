@@ -558,7 +558,7 @@ private struct ConversationImagePreviewContent: View {
         .task(id: mediaRequestIdentity) {
             await loadSourceIfNeeded()
         }
-        .onChange(of: isTimelineScrolling) { _, scrolling in
+        .onChange(of: isTimelineScrolling) {scrolling in
             if !scrolling { publishPendingImage() }
         }
     }

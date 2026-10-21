@@ -134,7 +134,7 @@ struct QueuedTurnManagerSheet: View {
         NavigationStack {
             Group {
                 if turns.isEmpty {
-                    ContentUnavailableView(L10n.text("ui.no_messages_to_send"), systemImage: "tray")
+                    CompatContentUnavailableView(L10n.text("ui.no_messages_to_send"), systemImage: "tray")
                 } else {
                     List {
                         Section {

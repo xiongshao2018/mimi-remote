@@ -195,7 +195,7 @@ private struct RuntimeActivityPanelView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 if runtimeMessages.isEmpty {
-                    ContentUnavailableView(L10n.text("ui.no_active_entries_yet"), systemImage: "list.bullet.rectangle")
+                    CompatContentUnavailableView(L10n.text("ui.no_active_entries_yet"), systemImage: "list.bullet.rectangle")
                         .font(themeStore.uiFont(.caption))
                         .padding(.top, 48)
                 } else {

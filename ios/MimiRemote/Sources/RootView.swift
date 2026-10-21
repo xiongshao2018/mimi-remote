@@ -82,7 +82,7 @@ struct RootView: View {
             // App 长时间停留前台时，也要在短期 Token 到期前主动续期。
             await managedConnectionEntitlementStore.maintainCurrentGrant()
         }
-        .onChange(of: appStore.connectionProfiles) { _, _ in
+        .onChange(of: appStore.connectionProfiles) {_ in
             // 删除重复 endpoint 后，旧数据可能刚刚变成可唯一归属；此时立即重试，
             // 不要求用户先进入工作区页面才能恢复原来的图标偏好。
             migrateLegacyWorkspaceAppearance()
@@ -205,7 +205,7 @@ struct RootView: View {
             }
             await sessionStore.pollSelectedProjectSessionsWhileVisible()
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) {phase in
             // 先登记前台状态再决定是否恢复：闸门读的是这份镜像，保证“场景已激活”和
             // “恢复进行中”在同一次回调里一起生效，中间没有可被提前放行的帧。
             foregroundResume.observeScene(active: phase == .active)
@@ -256,10 +256,10 @@ struct RootView: View {
                 outcome = await performForegroundResume(recoverTailcat: shouldRecoverTailcat)
             }
         }
-        .onChange(of: sessionStore.selectedSession) { _, session in
+        .onChange(of: sessionStore.selectedSession) {session in
             persistSessionRestoreSnapshotIfNeeded(session)
         }
-        .onChange(of: appStore.activeConnectionProfileID) { _, profileID in
+        .onChange(of: appStore.activeConnectionProfileID) {profileID in
             foregroundResumeTask?.cancel()
             foregroundResumeTask = nil
             if let generation = foregroundResume.inFlightGeneration {
@@ -271,7 +271,7 @@ struct RootView: View {
             }
             switchRestorationNamespace(to: profileID)
         }
-        .onChange(of: sessionStore.isConnectionSwitchInProgress) { _, isSwitching in
+        .onChange(of: sessionStore.isConnectionSwitchInProgress) {isSwitching in
             if isSwitching {
                 hostStatusStore.cancel()
             }

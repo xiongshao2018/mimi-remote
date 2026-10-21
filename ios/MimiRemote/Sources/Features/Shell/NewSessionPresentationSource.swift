@@ -104,7 +104,7 @@ struct NewSessionPresentationModifier: ViewModifier {
                 .presentationDetents([.height(430), .large])
                 .presentationDragIndicator(.visible)
         } else {
-            content.presentationSizing(.form)
+            content.compatPresentationSizing(.form)
         }
     }
 }

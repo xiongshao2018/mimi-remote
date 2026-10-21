@@ -575,7 +575,7 @@ struct SkillInvocationCard: View {
         case .sent, .confirmed:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(tint)
-                .symbolEffect(.appear, options: reduceMotion ? .nonRepeating : .nonRepeating)
+                .compatSymbolAppear()
         }
     }
 }

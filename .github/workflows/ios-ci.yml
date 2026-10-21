@@ -114,8 +114,8 @@ jobs:
         run: go test ./... -count=1
 
   conversation-regressions:
-    # 使用稳定版 Xcode 26 / iOS 26 Simulator 运行回归；工程仍以 iOS 18 为 deployment target，
-    # 因此编译阶段会检查所有 iOS 26+ API 是否具备有效 availability fallback。
+    # 使用稳定版 Xcode 26 / iOS 26 Simulator 运行回归；工程以 iOS 16.2 为 deployment target，
+    # 因此编译阶段会把 iOS 17/18/26 API 的 availability fallback 缺口全部编译报错暴露出来。
     runs-on: macos-26
     timeout-minutes: 35
     steps:
@@ -137,7 +137,7 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available
 
-      - name: Verify iOS 18 deployment target
+      - name: Verify iOS 16.2 deployment target
         shell: bash
         run: |
           set -euo pipefail
@@ -157,8 +157,8 @@ jobs:
                 | awk '$1 == "IPHONEOS_DEPLOYMENT_TARGET" && $2 == "=" { print $3 }' \
                 | sort -u
             )"
-            if [[ "$deployment_targets" != "18.0" ]]; then
-              echo "$target_name expected iOS deployment target 18.0, got: $deployment_targets" >&2
+            if [[ "$deployment_targets" != "16.2" ]]; then
+              echo "$target_name expected iOS deployment target 16.2, got: $deployment_targets" >&2
               exit 1
             fi
           done

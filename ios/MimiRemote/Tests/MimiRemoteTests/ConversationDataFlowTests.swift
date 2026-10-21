@@ -614,7 +614,7 @@ final class ConversationDataFlowTests: XCTestCase {
     }
 
     func testConversationTimelineControllerTracksUserDrivenScrollPhases() {
-        let phases: [ScrollPhase] = [.tracking, .interacting, .decelerating, .animating]
+        let phases: [CompatScrollPhase] = [.tracking, .interacting, .decelerating, .animating]
         for phase in phases {
             let controller = ConversationTimelineScrollController()
             let scope = ScopedSessionID(profileID: "timeline-controller", sessionID: "phase-\(phase)")

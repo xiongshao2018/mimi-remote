@@ -41,7 +41,7 @@ struct ComposerAutocompletePanel: View {
                                 .id(suggestion.id)
                         }
                     }
-                    .onGeometryChange(for: CGFloat.self) { geometry in
+                    .compatOnGeometryChange(for: CGFloat.self) { geometry in
                         geometry.size.height
                     } action: { height in
                         measuredListHeight = height
@@ -49,8 +49,8 @@ struct ComposerAutocompletePanel: View {
                 }
                 // 浮层按内容高度收缩；首帧尚未测量时用估算值，避免先撑满再回弹。
                 .frame(height: min(listHeight, maxListHeight))
-                .scrollBounceBehavior(.basedOnSize)
-                .onChange(of: selectedIndex) { _, index in
+                .compatScrollBounceBehavior(.basedOnSize)
+                .onChange(of: selectedIndex) {index in
                     guard suggestions.indices.contains(index) else { return }
                     proxy.scrollTo(suggestions[index].id)
                 }

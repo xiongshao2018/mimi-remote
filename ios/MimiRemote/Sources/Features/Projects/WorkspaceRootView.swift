@@ -352,17 +352,17 @@ struct WorkspaceRootView: View {
             await refreshCatalog()
             synchronizeSelection()
         }
-        .onChange(of: appStore.activeHostScope) { _, _ in
+        .onChange(of: appStore.activeHostScope) {_ in
             sessionRefreshOwner.cancelAll()
             cancelManualCatalogRefresh()
         }
-        .onChange(of: appStore.isCredentialMemorySuspended) { _, isSuspended in
+        .onChange(of: appStore.isCredentialMemorySuspended) {isSuspended in
             if isSuspended {
                 sessionRefreshOwner.cancelAll()
                 cancelManualCatalogRefresh()
             }
         }
-        .onChange(of: selectedWorkspaceID) { _, selectedID in
+        .onChange(of: selectedWorkspaceID) {selectedID in
             sessionRefreshOwner.cancelAll()
             onWorkspaceSelectionChange?(selectedID)
         }
@@ -370,7 +370,7 @@ struct WorkspaceRootView: View {
             sessionRefreshOwner.deactivate()
             cancelManualCatalogRefresh()
         }
-        .onChange(of: appStore.connectionProfiles) { _, _ in
+        .onChange(of: appStore.connectionProfiles) {_ in
             // 这里只重试本地偏好迁移，不重新请求目录。删除或修改重复 endpoint 后，
             // 当前 Profile 一旦成为唯一匹配，就应立即恢复旧版自定义图标值。
             migrateLegacyWorkspaceAppearance()
@@ -407,7 +407,7 @@ struct WorkspaceRootView: View {
                 )
             }
         }
-        .onChange(of: sessionStore.sidebarProjects.map(\.id)) { _, _ in
+        .onChange(of: sessionStore.sidebarProjects.map(\.id)) {_ in
             pagerTransitionState.update(pagePosition: nil)
             synchronizeSelection()
         }
@@ -603,7 +603,7 @@ struct WorkspaceRootView: View {
     /// 分页物理特性（跟手、速度投射、可中断反向）由系统提供，不自己写 DragGesture。
     private func projectPager(tokens: ThemeTokens) -> some View {
         ScrollViewReader { proxy in
-            projectPagerScrollView(tokens: tokens)
+            projectPagerScrollView(tokens: tokens, proxy: proxy)
                 .onAppear {
                     // 宽屏会话详情返回、切换布局容器时分页会整个重建：`scrollPosition(id:)` 不会把
                     // 首帧之前已有的选择应用到 LazyHStack，正文会停在第一页而胶囊仍标着原工作区
@@ -616,34 +616,37 @@ struct WorkspaceRootView: View {
         }
     }
 
-    private func projectPagerScrollView(tokens: ThemeTokens) -> some View {
+    private func projectPagerScrollView(tokens: ThemeTokens, proxy: ScrollViewProxy) -> some View {
         // scrollTransition 闭包是 Sendable；先冻结成值类型快照，避免直接跨隔离域读取 Environment。
         let allowsSpatialMotion = !reduceMotion
+
+        return Group {
+            if #available(iOS 17.0, *) {
+                pagingProjectPager(tokens: tokens, allowsSpatialMotion: allowsSpatialMotion)
+            } else {
+                legacyPagingProjectPager(tokens: tokens, proxy: proxy)
+            }
+        }
+    }
+
+    /// iOS 17+ 分页正文：页宽、分页物理与选择绑定全部交给系统。
+    @available(iOS 17.0, *)
+    private func pagingProjectPager(tokens: ThemeTokens, allowsSpatialMotion: Bool) -> some View {
         let projectCount = sessionStore.sidebarProjects.count
 
         return ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 0) {
                 ForEach(sessionStore.sidebarProjects) { project in
-                    // 状态行下沉进详情视图，与会话列表共用同一组内边距并紧贴列表：
-                    // 它描述的是“这个列表属于哪个工作区”，悬在胶囊行下方会读成孤立的元数据。
-                    workspaceDetail(
-                        project: project,
-                        showsStatusLine: sessionStore.isWorkspaceUnavailable(project.id)
-                    ) {
-                        workspaceStatusLine(project: project, tokens: tokens)
-                    }
-                    .refreshable {
-                        await refreshWorkspaceContent(projectID: project.id)
-                    }
-                    .containerRelativeFrame(.horizontal)
-                    // 离开视口中心的页面按进度缩小并变淡。scrollTransition 的相位跟着
-                    // 手指走，所以缩放是 1:1 可中断的，而不是松手后再播一段固定动画。
-                    .scrollTransition(.interactive, axis: .horizontal) { content, phase in
-                        content
-                            .scaleEffect(!allowsSpatialMotion || phase.isIdentity ? 1 : 0.97)
-                            .opacity(!allowsSpatialMotion || phase.isIdentity ? 1 : 0.72)
-                    }
-                    .id(project.id)
+                    projectPagerPage(project: project, tokens: tokens)
+                        .containerRelativeFrame(.horizontal)
+                        // 离开视口中心的页面按进度缩小并变淡。scrollTransition 的相位跟着
+                        // 手指走，所以缩放是 1:1 可中断的，而不是松手后再播一段固定动画。
+                        .scrollTransition(.interactive, axis: .horizontal) { content, phase in
+                            content
+                                .scaleEffect(!allowsSpatialMotion || phase.isIdentity ? 1 : 0.97)
+                                .opacity(!allowsSpatialMotion || phase.isIdentity ? 1 : 0.72)
+                        }
+                        .id(project.id)
                 }
             }
             .scrollTargetLayout()
@@ -651,31 +654,122 @@ struct WorkspaceRootView: View {
         .scrollTargetBehavior(.paging)
         // 直接绑定唯一的选择来源：点胶囊会滚动分页，滑动分页会回写胶囊选中态。
         .scrollPosition(id: $selectedWorkspaceID, anchor: .center)
-        .onScrollGeometryChange(for: CGFloat?.self) { geometry in
+        .compatOnScrollGeometryChange(for: CGFloat?.self) { geometry in
             WorkspacePagerTransition.pagePosition(
                 contentOffsetX: geometry.contentOffset.x,
                 leadingInset: geometry.contentInsets.leading,
                 viewportWidth: geometry.containerSize.width,
                 pageCount: projectCount
             )
-        } action: { _, pagePosition in
+        } action: { pagePosition in
             pagerTransitionState.update(pagePosition: pagePosition)
         }
-        .onScrollPhaseChange { _, phase in
-            switch phase {
-            case .tracking, .interacting, .decelerating:
-                if !pagerSelectionIsUserDriven {
-                    MimiHaptics.prepare(.snap)
-                }
-                pagerSelectionIsUserDriven = true
-            case .idle:
-                pagerSelectionIsUserDriven = false
-            case .animating:
-                // 系统分页可能在手势后进入动画阶段；保留来源直到真正停止。
-                break
-            }
+        .compatOnScrollPhaseChange { phase in
+            handlePagerScrollPhase(phase)
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// iOS 16 没有 `containerRelativeFrame` / `scrollTargetLayout` /
+    /// `scrollTargetBehavior(.paging)` / `scrollPosition(id:)`：页宽改为实测后固定，
+    /// 翻页定位靠 `ScrollViewReader`，落点吸附与「滑动回写胶囊选中」由兼容滚动几何
+    /// 按 contentOffset 反推页码补齐。代价是没有系统的速度投射与回弹，只保留跟手滑动。
+    private func legacyPagingProjectPager(tokens: ThemeTokens, proxy: ScrollViewProxy) -> some View {
+        GeometryReader { container in
+            let pageWidth = max(container.size.width, 1)
+            let projectCount = sessionStore.sidebarProjects.count
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(sessionStore.sidebarProjects) { project in
+                        projectPagerPage(project: project, tokens: tokens)
+                            .frame(width: pageWidth)
+                            .id(project.id)
+                    }
+                }
+            }
+            .compatOnScrollGeometryChange(for: CGFloat?.self) { geometry in
+                WorkspacePagerTransition.pagePosition(
+                    contentOffsetX: geometry.contentOffset.x,
+                    leadingInset: geometry.contentInsets.leading,
+                    viewportWidth: geometry.containerSize.width,
+                    pageCount: projectCount
+                )
+            } action: { pagePosition in
+                pagerTransitionState.update(pagePosition: pagePosition)
+                syncLegacyPagerSelection(pagePosition: pagePosition)
+            }
+            .compatOnScrollPhaseChange { phase in
+                handlePagerScrollPhase(phase)
+                if phase == .idle {
+                    snapLegacyPagerPage(pageWidth: pageWidth, proxy: proxy)
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func projectPagerPage(project: AgentProject, tokens: ThemeTokens) -> some View {
+        // 状态行下沉进详情视图，与会话列表共用同一组内边距并紧贴列表：
+        // 它描述的是“这个列表属于哪个工作区”，悬在胶囊行下方会读成孤立的元数据。
+        workspaceDetail(
+            project: project,
+            showsStatusLine: sessionStore.isWorkspaceUnavailable(project.id)
+        ) {
+            workspaceStatusLine(project: project, tokens: tokens)
+        }
+        .refreshable {
+            await refreshWorkspaceContent(projectID: project.id)
+        }
+    }
+
+    private func handlePagerScrollPhase(_ phase: CompatScrollPhase) {
+        switch phase {
+        case .tracking, .interacting, .decelerating:
+            if !pagerSelectionIsUserDriven {
+                MimiHaptics.prepare(.snap)
+            }
+            pagerSelectionIsUserDriven = true
+        case .idle:
+            pagerSelectionIsUserDriven = false
+        case .animating:
+            // 系统分页可能在手势后进入动画阶段；保留来源直到真正停止。
+            break
+        }
+    }
+
+    /// 过半即回写胶囊选中态，语义对齐 iOS 17 的 `scrollPosition(id:)` 连续绑定。
+    private func syncLegacyPagerSelection(pagePosition: CGFloat?) {
+        guard let pagePosition else { return }
+        let projects = sessionStore.sidebarProjects
+        guard let project = legacyPagerProject(at: pagePosition, in: projects) else { return }
+        guard selectedWorkspaceID != project.id else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selectedWorkspaceID = project.id
+        }
+    }
+
+    /// 松手后补一次系统分页那样的吸附：iOS 16 的 ScrollView 不会停在整页，
+    /// 不吸附就会长期停在两个工作区之间。
+    private func snapLegacyPagerPage(pageWidth: CGFloat, proxy: ScrollViewProxy) {
+        guard pageWidth > 1 else { return }
+        let projects = sessionStore.sidebarProjects
+        guard let project = legacyPagerProject(
+            at: pagerTransitionState.pagePosition,
+            in: projects
+        ) else { return }
+        proxy.scrollTo(project.id, anchor: .center)
+    }
+
+    private func legacyPagerProject(
+        at pagePosition: CGFloat?,
+        in projects: [AgentProject]
+    ) -> AgentProject? {
+        guard let pagePosition, !projects.isEmpty else { return nil }
+        let index = min(max(Int(pagePosition.rounded()), 0), projects.count - 1)
+        return projects[index]
     }
 
     private func workspaceLoadingState(tokens: ThemeTokens) -> some View {
@@ -817,13 +911,13 @@ struct WorkspaceRootView: View {
                         )
                     )
                 }
-                .onGeometryChange(for: CGFloat.self) { proxy in
+                .compatOnGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { width in
                     guard width > 0, workspaceStripViewportWidth != width else { return }
                     workspaceStripViewportWidth = width
                 }
-                .onChange(of: selectedWorkspaceID) { previousID, selectedID in
+                .compatOnChangeWithPrevious(of: selectedWorkspaceID) { previousID, selectedID in
                     handleWorkspaceSelectionHaptic(previousID: previousID, selectedID: selectedID)
                     guard let selectedID else { return }
                     // 首次恢复选择直接定位，避免页面刚出现就自行滑动；后续切换与正文分页
@@ -862,7 +956,7 @@ struct WorkspaceRootView: View {
         .frame(height: WorkspaceStripLayout.stripHeight)
         .frame(maxWidth: WorkspaceStripLayout.maxContentWidth, alignment: .leading)
         // 只观测已经排好的整行宽度，不参与布局协商；插不插筛选器都读到同一个值。
-        .onGeometryChange(for: CGFloat.self) { proxy in
+        .compatOnGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
             guard width > 0, workspaceStripContainerWidth != width else { return }
@@ -1525,7 +1619,7 @@ private struct WorkspaceProjectChip: View {
                             .fixedSize()
                             .padding(.leading, 8)
                             .hidden()
-                            .onGeometryChange(for: CGFloat.self) { proxy in
+                            .compatOnGeometryChange(for: CGFloat.self) { proxy in
                                 proxy.size.width
                             } action: { width in
                                 guard width > 0, measuredNameWidth != width else { return }

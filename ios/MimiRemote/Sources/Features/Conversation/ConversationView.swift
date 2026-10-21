@@ -76,7 +76,7 @@ struct ConversationView: View {
             // ConversationLayout。若跟随 List / Composer 的 intrinsic width 收缩，
             // 固定宽度的 Composer 会把下一帧继续锁在最小 240pt，形成宽度反馈环。
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onGeometryChange(for: CGFloat.self) { geometry in
+            .compatOnGeometryChange(for: CGFloat.self) { geometry in
                 geometry.size.width
             } action: { width in
                 guard width > 0, measuredContentWidth != width else {

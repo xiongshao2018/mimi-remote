@@ -609,7 +609,7 @@ private struct ScrollMediaTestView: View {
             .environmentObject(sessionStore)
             .environment(\.conversationTimelineIsScrolling, state.scrolling)
             .environment(\.conversationMediaLayoutWillChange, { state.layoutChanges += 1 })
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { state.height = $0 }
+            .compatOnGeometryChange(for: CGFloat.self) { $0.size.height } action: { state.height = $0 }
             Spacer(minLength: 0)
         }
         .frame(width: 300)

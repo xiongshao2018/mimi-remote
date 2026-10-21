@@ -75,14 +75,14 @@ struct SessionContextSidebarView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
-                .contentMargins(.top, 8, for: .scrollContent)
-                .contentMargins(.bottom, 12, for: .scrollContent)
+                .compatContentMargins(.top, 8, for: .scrollContent)
+                .compatContentMargins(.bottom, 12, for: .scrollContent)
                 .background(tokens.sidebarBackground)
                 .task(id: sessionStore.selectedCommandActionPath) {
                     await sessionStore.refreshSelectedCommandActions()
                 }
             } else {
-                ContentUnavailableView(L10n.text("ui.no_session_selected"), systemImage: "sidebar.right")
+                CompatContentUnavailableView(L10n.text("ui.no_session_selected"), systemImage: "sidebar.right")
                     .font(themeStore.uiFont(.caption))
             }
         }

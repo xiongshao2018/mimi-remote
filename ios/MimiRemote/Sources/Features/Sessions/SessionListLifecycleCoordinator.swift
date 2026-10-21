@@ -264,7 +264,7 @@ final class SessionListLifecycleCoordinator: ObservableObject {
         return feedback
     }
 
-    func setScrollPhase(_ phase: ScrollPhase, latestMembership: SessionListMembership) {
+    func setScrollPhase(_ phase: CompatScrollPhase, latestMembership: SessionListMembership) {
         setUserScrolling(
             Self.shouldSuspendRegroup(for: phase),
             latestMembership: latestMembership
@@ -286,13 +286,8 @@ final class SessionListLifecycleCoordinator: ObservableObject {
         pendingMembership = nil
     }
 
-    static func shouldSuspendRegroup(for phase: ScrollPhase) -> Bool {
-        switch phase {
-        case .tracking, .interacting, .decelerating:
-            return true
-        case .idle, .animating:
-            return false
-        }
+    static func shouldSuspendRegroup(for phase: CompatScrollPhase) -> Bool {
+        phase.isUserDriven
     }
 
     private func commit(_ nextMembership: SessionListMembership) {

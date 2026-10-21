@@ -602,7 +602,7 @@ struct ModelReasoningGridPicker: View {
             }
             .padding(ModelReasoningGridMetrics.contentPadding)
         }
-        .scrollBounceBehavior(.basedOnSize)
+        .compatScrollBounceBehavior(.basedOnSize)
         .frame(
             minWidth: 320,
             idealWidth: 400,
@@ -912,7 +912,7 @@ private struct ModelReasoningStandardGrid<CornerContent: View>: View {
                 grid(tokens: tokens)
             }
         }
-        .onChange(of: selection) { _, _ in
+        .onChange(of: selection) {_ in
             guard dragPoint == nil else { return }
             previewSelection = nil
         }

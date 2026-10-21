@@ -126,7 +126,7 @@ extension ComposerView {
                 usesCondensedTitle: usesCompactTitle,
                 accessibilityLabel: L10n.text("ui.switch_model_and_inference_strength")
             )
-            .contentTransition(.opacity)
+            .compatContentTransition(.opacity)
         }
         .buttonStyle(MimiPressButtonStyle(reduceMotion: reduceMotion))
         .accessibilityLabel(L10n.text("ui.switch_model_and_inference_strength"))
@@ -165,7 +165,7 @@ extension ComposerView {
             // large detent，并继续由 Picker 内部滚动，避免放大文字被裁切。
             .presentationDetents(modelPickerPresentationDetents)
             .presentationDragIndicator(.visible)
-            .presentationBackground(themeStore.tokens(for: colorScheme).surface)
+            .compatPresentationBackground(themeStore.tokens(for: colorScheme).surface)
         }
     }
 

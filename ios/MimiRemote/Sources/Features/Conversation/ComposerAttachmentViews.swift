@@ -545,13 +545,18 @@ struct AddContentPanel: View {
         )
         // 整个 Sheet 只使用一层材质，避免内容区和底部留白分别落到不同的不透明背景上。
         // “降低透明度”开启时改回主题实色，保证文字与控件对比度。
-        .presentationBackground {
+        .compatPresentationBackgroundStyle {
             if reduceTransparency {
-                tokens.surface
+                AnyShapeStyle(tokens.surface)
+            } else if #available(iOS 17.0, *) {
+                // View 当 ShapeStyle 用是 iOS 17；16.2 只能用主题实色底板。
+                AnyShapeStyle(
+                    Rectangle()
+                        .fill(WorkbenchMaterial.surface)
+                        .overlay(tokens.surface.opacity(colorScheme == .light ? 0.28 : 0.20))
+                )
             } else {
-                Rectangle()
-                    .fill(WorkbenchMaterial.surface)
-                    .overlay(tokens.surface.opacity(colorScheme == .light ? 0.28 : 0.20))
+                AnyShapeStyle(tokens.surface)
             }
         }
         .modifier(
@@ -562,7 +567,7 @@ struct AddContentPanel: View {
             )
         )
         .presentationDragIndicator(.visible)
-        .presentationCornerRadius(28)
+        .compatPresentationCornerRadius(28)
     }
 
     private func panelHeader(tokens: ThemeTokens) -> some View {
@@ -1146,7 +1151,7 @@ struct AddContentPanel: View {
 
     private var standardRootPanelHeight: CGFloat {
         // `.height` 只负责 iPhone 上 Popover 的 Sheet 退化；原生 Popover 本身由
-        // `.presentationSizing(.fitted)` 按真实内容测量，二者都不会再撑到旧的 512pt。
+        // `.compatPresentationSizing(.fitted)` 按真实内容测量，二者都不会再撑到旧的 512pt。
         let listActionCount = (showsSkillActions ? 2 : 0) + (showsPermissionSettings ? 1 : 0) + 1
         let attachmentActionsHeight: CGFloat = showsAttachmentActions ? 93 : 0
         return 32 + attachmentActionsHeight + CGFloat(listActionCount * 56)
@@ -1170,22 +1175,22 @@ private struct AddContentPanelPresentationSizing: ViewModifier {
         if page == .root {
             if usesAccessibilityLayout {
                 content
-                    .presentationSizing(.form)
+                    .compatPresentationSizing(.form)
                     .presentationDetents([.large])
             } else {
                 content
-                    .presentationSizing(.fitted)
+                    .compatPresentationSizing(.fitted)
                     .presentationDetents([.height(standardRootHeight)])
             }
         } else {
             // 子页面继续沿用原来的尺寸和滚动策略。
             if usesAccessibilityLayout {
                 content
-                    .presentationSizing(.form)
+                    .compatPresentationSizing(.form)
                     .presentationDetents([.large])
             } else {
                 content
-                    .presentationSizing(.form)
+                    .compatPresentationSizing(.form)
                     .presentationDetents([.height(470)])
             }
         }

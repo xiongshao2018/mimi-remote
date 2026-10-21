@@ -171,8 +171,8 @@ struct ProjectSidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .contentMargins(.top, showsInlineHeader ? 6 : 0, for: .scrollContent)
-        .contentMargins(.bottom, 12, for: .scrollContent)
+        .compatContentMargins(.top, showsInlineHeader ? 6 : 0, for: .scrollContent)
+        .compatContentMargins(.bottom, 12, for: .scrollContent)
         .scrollContentBackground(.hidden)
         .background(tokens.sidebarBackground)
     }
@@ -635,10 +635,10 @@ struct OpenWorkspaceSheet: View {
                     // 默认进入服务端浏览根（第一个 scan root），失败时仍可手动输入路径。
                     await browse(to: "")
                 }
-                .onChange(of: path) { _, _ in
+                .onChange(of: path) {_ in
                     localError = nil
                 }
-                .onChange(of: isManualPathFocused) { _, isFocused in
+                .onChange(of: isManualPathFocused) {isFocused in
                     // 键盘会显著压缩目录与说明区；用系统 large detent 给输入留出空间，
                     // 关闭键盘后不强制回落，保留用户对 Sheet 高度的控制。
                     if isFocused {
@@ -650,7 +650,7 @@ struct OpenWorkspaceSheet: View {
         .tint(tokens.primaryAction)
         // 目录浏览、路径条与说明文字共用一张画布，行本身不再另铺白底：
         // 一屏只有一层底色时，20 多行的节奏才由行距和分隔线决定，而不是由色块堆叠决定。
-        .presentationBackground(tokens.sidebarBackground)
+        .compatPresentationBackground(tokens.sidebarBackground)
         // 默认只占可用高度的约八成，保留背景上下文；仍允许按系统手势上拉到全屏。
         .presentationDetents(
             [OpenWorkspaceSheet.compactPresentationDetent, .large],
@@ -690,7 +690,7 @@ struct OpenWorkspaceSheet: View {
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
         // 静止时首行与路径条留一道窄缝；滚动后内容仍从路径条底下穿过。
-        .contentMargins(.top, 6, for: .scrollContent)
+        .compatContentMargins(.top, 6, for: .scrollContent)
         .background(tokens.sidebarBackground)
         // 路径条属于浮在内容之上的控制层，不随目录列表滚走：深目录里「我在哪」
         // 必须始终可读，同时列表从它底下穿过，边界交给 scroll edge 表达而不是分割线。
@@ -1265,8 +1265,8 @@ struct WorkspaceCurrentDirectoryCard: View {
                 .frame(minHeight: 44)
             }
             // 短路径贴左展示，深路径也从绝对路径起点开始；后半段留给用户向右滑动查看。
-            .defaultScrollAnchor(.leading, for: .alignment)
-            .defaultScrollAnchor(.leading, for: .initialOffset)
+            .compatDefaultScrollAnchor(.leading, for: .alignment)
+            .compatDefaultScrollAnchor(.leading, for: .initialOffset)
 
             if isBrowsing {
                 // 进度留在路径条上，列表因此不必清空重画：位置指示本来就是这次跳转的主语。

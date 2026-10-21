@@ -105,7 +105,7 @@ struct DiffPanelView: View {
             }
             await sessionStore.pollGitTestFlightRelease(path: gitPath)
         }
-        .onChange(of: gitStatus) { _, status in
+        .onChange(of: gitStatus) {status in
             guard status?.hasChanges == true else {
                 return
             }
@@ -195,7 +195,7 @@ struct DiffPanelView: View {
 
             if let status = gitStatus {
                 if !status.isRepository {
-                    ContentUnavailableView(L10n.text("ui.the_current_workspace_is_not_a_git_repository"), systemImage: "folder")
+                    CompatContentUnavailableView(L10n.text("ui.the_current_workspace_is_not_a_git_repository"), systemImage: "folder")
                         .font(themeStore.uiFont(.caption))
                         .padding(.top, 48)
                 } else {
@@ -266,7 +266,7 @@ struct DiffPanelView: View {
                         }
                     )
                     if !status.hasChanges && fileChangeItems.isEmpty {
-                        ContentUnavailableView(L10n.text("ui.no_file_changes_yet"), systemImage: "doc.text.magnifyingglass")
+                        CompatContentUnavailableView(L10n.text("ui.no_file_changes_yet"), systemImage: "doc.text.magnifyingglass")
                             .font(themeStore.uiFont(.caption))
                             .padding(.vertical, 16)
                     }
@@ -385,7 +385,7 @@ struct DiffPanelView: View {
                 )
                 .padding(.top, 48)
             } else {
-                ContentUnavailableView(L10n.text("ui.no_git_status_yet"), systemImage: "arrow.clockwise")
+                CompatContentUnavailableView(L10n.text("ui.no_git_status_yet"), systemImage: "arrow.clockwise")
                     .font(themeStore.uiFont(.caption))
                     .padding(.top, 48)
             }

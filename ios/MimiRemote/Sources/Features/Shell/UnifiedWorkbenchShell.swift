@@ -129,37 +129,37 @@ struct UnifiedWorkbenchShell: View {
                 applyDebugLaunchRouteIfNeeded(layout: layout)
                 synchronizeSidebarLifecycle()
             }
-            .onChange(of: sidebarLifecycleObservations) { _, _ in
+            .onChange(of: sidebarLifecycleObservations) {_ in
                 synchronizeSidebarLifecycle()
             }
-            .onChange(of: appStore.activeHostScope.profileID) { _, _ in
+            .onChange(of: appStore.activeHostScope.profileID) {_ in
                 synchronizeSidebarLifecycle()
                 workspaceRuntimeSelection.reset()
                 workspaceBrowseSelection.reset()
                 // 会话 ID 只在同一台电脑内唯一，换电脑后旧历史不能再用于 ⌘[ / ⌘]。
                 sessionHistory = WorkbenchSessionHistory()
             }
-            .onChange(of: preferredWorkspaceRuntimeRawValue) { _, _ in
+            .onChange(of: preferredWorkspaceRuntimeRawValue) {_ in
                 workspaceRuntimeSelection.reset()
             }
-            .onChange(of: proposedLayout.usesCompactNavigation) { _, _ in
+            .onChange(of: proposedLayout.usesCompactNavigation) {_ in
                 layoutModeCommitGate.request {
                     commitLayoutMode(proposedLayout)
                 }
             }
-            .onChange(of: layout.usesAttachedInspector) { _, _ in
+            .onChange(of: layout.usesAttachedInspector) {_ in
                 handleRelatedPresentationChange(layout: layout)
             }
-            .onChange(of: layout.usesFloatingSidebarSurface) { _, usesFloatingSidebarSurface in
+            .onChange(of: layout.usesFloatingSidebarSurface) {usesFloatingSidebarSurface in
                 handleFloatingSidebarLayoutModeChange(
                     usesFloatingSidebarSurface: usesFloatingSidebarSurface
                 )
             }
-            .onChange(of: sessionStore.lastSelectionCommit) { _, commit in
+            .onChange(of: sessionStore.lastSelectionCommit) {commit in
                 guard let commit else { return }
                 handleSelectionCommit(commit, layout: layout)
             }
-            .onChange(of: restorationRoute) { _, route in
+            .onChange(of: restorationRoute) {route in
                 guard navigationState.route != route else { return }
                 applyNavigation(.synchronize(route), layout: layout)
             }
@@ -168,10 +168,10 @@ struct UnifiedWorkbenchShell: View {
                     visibleSessionNotificationRoute(layout: layout)
                 )
             }
-            .onChange(of: visibleSessionNotificationRoute(layout: layout)) { _, route in
+            .onChange(of: visibleSessionNotificationRoute(layout: layout)) {route in
                 updateVisibleSessionNotificationRoute(route)
             }
-            .onChange(of: visibleTranscriptScope(layout: layout)) { _, _ in
+            .onChange(of: visibleTranscriptScope(layout: layout)) {_ in
                 transcriptPresentation.reset()
             }
             .onDisappear {
@@ -238,8 +238,9 @@ struct UnifiedWorkbenchShell: View {
         case .systemSheet:
             sheet
         case .zoom(let sourceID):
-            sheet.navigationTransition(
-                .zoom(sourceID: sourceID, in: presentationNamespace)
+            sheet.compatZoomTransition(
+                sourceID: sourceID,
+                in: presentationNamespace
             )
         }
     }
@@ -677,7 +678,7 @@ struct UnifiedWorkbenchShell: View {
                 // 浮动侧栏已经有 12pt 外围安全间距；移除 SidebarListStyle 额外添加的
                 // scroll content leading margin，让导航、分组头和监视行整列一起左移。
                 sidebarList(tokens: tokens, layout: layout)
-                    .contentMargins(.leading, 0, for: .scrollContent)
+                    .compatContentMargins(.leading, 0, for: .scrollContent)
             } else {
                 // 覆盖式 / 系统侧栏继续使用平台默认边距，避免贴到设备安全区。
                 sidebarList(tokens: tokens, layout: layout)
@@ -790,7 +791,7 @@ struct UnifiedWorkbenchShell: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .contentMargins(
+        .compatContentMargins(
             .trailing,
             layout.usesFloatingSidebarSurface
                 ? WorkbenchSidebarSurfaceMetrics.openDragStripWidth
@@ -1028,7 +1029,7 @@ struct UnifiedWorkbenchShell: View {
                     onClose: {}
                 )
             } else {
-                ContentUnavailableView(
+                CompatContentUnavailableView(
                     L10n.text("ui.sub_agent"),
                     systemImage: "person.2.slash",
                     description: Text(L10n.text("ui.sub_agent_unavailable"))

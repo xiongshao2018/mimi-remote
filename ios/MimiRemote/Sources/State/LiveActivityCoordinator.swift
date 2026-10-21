@@ -701,13 +701,17 @@ final class LiveActivityCoordinator: ObservableObject {
 
     private func startObservingActivities() {
         guard observationTasks.isEmpty else { return }
-        observationTasks.append(Task { @MainActor [weak self] in
-            for await data in Activity<MimiTurnActivityAttributes>.pushToStartTokenUpdates {
-                guard let self else { return }
-                self.latestStartToken = Self.hex(data)
-                self.enqueue { await self.registerStartTokenIfNeeded() }
-            }
-        })
+        // `pushToStartTokenUpdates` 是 iOS 17.2：16.x 没有远程拉起能力，
+        // 只登记更新票据，卡仍由本机 agentd 事件驱动。
+        if #available(iOS 17.2, *) {
+            observationTasks.append(Task { @MainActor [weak self] in
+                for await data in Activity<MimiTurnActivityAttributes>.pushToStartTokenUpdates {
+                    guard let self else { return }
+                    self.latestStartToken = Self.hex(data)
+                    self.enqueue { await self.registerStartTokenIfNeeded() }
+                }
+            })
+        }
         observationTasks.append(Task { @MainActor [weak self] in
             for await activity in Activity<MimiTurnActivityAttributes>.activityUpdates {
                 guard let self else { return }

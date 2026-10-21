@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -132,18 +133,28 @@ private struct InAppToastHost: ViewModifier {
     @State private var boundaryMeasurement: BoundaryMeasurement?
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: .top) {
+        content
+        // ObservableObject 经 Environment 传入不会自动让 body 失效（@Observable 才会），
+        // 因此显式订阅一次：保护区变化后重新量提示顶边。
+            .onReceive(placementChanges) {
+                guard let toast else { return }
+                boundaryMeasurement = BoundaryMeasurement(
+                    toastID: toast.id,
+                    boundary: placement?.topBoundary()
+                )
+            }
+            .overlay(alignment: .top) {
             GeometryReader { proxy in
                 let hostFrame = proxy.frame(in: .global)
                 toastLayer(hostMinY: hostFrame.minY)
-                    .onChange(
+                    .compatOnChange(
                         of: PlacementInputs(
                             toastID: toast?.id,
                             hostFrame: hostFrame,
                             protectedRegionBottom: placement?.protectedRegionBottom
                         ),
                         initial: true
-                    ) { _, inputs in
+                    ) { inputs in
                         boundaryMeasurement = inputs.toastID.map {
                             BoundaryMeasurement(toastID: $0, boundary: placement?.topBoundary())
                         }
@@ -184,17 +195,28 @@ private struct InAppToastHost: ViewModifier {
                     .id(toast.id)
                     .task(id: toast.id) {
                         showsDetail = false
-                        AccessibilityNotification.Announcement(toast.accessibilityAnnouncement).post()
+                        CompatAccessibility.announce(toast.accessibilityAnnouncement)
                         await autoDismiss(toast)
                     }
             }
         }
         // GeometryReader 把子视图放在左上角；提示仍按原来的方式水平居中。
         .frame(maxWidth: .infinity, alignment: .top)
-        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.28), value: toast?.id)
+        .animation(reduceMotion ? .easeInOut(duration: 0.15) : .compatSnappy(duration: 0.28), value: toast?.id)
     }
 
     /// 新提示出现的这一帧 onChange 还没跑，直接量一次，避免先落在导航栏上再跳下来。
+    /// 保护区字典的变更流。objectWillChange 发在变更之前，切到主队列下一轮再读值。
+    private var placementChanges: AnyPublisher<Void, Never> {
+        guard let placement else {
+            return EmptyPublisher<Void, Never>().eraseToAnyPublisher()
+        }
+        return placement.objectWillChange
+            .map { _ in () }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
+
     private func topBoundary(for toast: InAppToast) -> CGFloat? {
         if let boundaryMeasurement, boundaryMeasurement.toastID == toast.id {
             return boundaryMeasurement.boundary
@@ -449,7 +471,7 @@ struct InlineNoticeCard<Actions: View>: View {
                 .stroke(borderColor(tokens), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
-        .onChange(of: title) { _, _ in
+        .onChange(of: title) {_ in
             showsDetail = false
         }
     }
@@ -525,8 +547,8 @@ struct ErrorPresentationBanner: View {
             }
         }
         .accessibilityIdentifier("conversation.errorBanner")
-        .onChange(of: presentation.message, initial: true) { _, message in
-            AccessibilityNotification.Announcement(message).post()
+        .compatOnChange(of: presentation.message, initial: true) { message in
+            CompatAccessibility.announce(message)
         }
     }
 }

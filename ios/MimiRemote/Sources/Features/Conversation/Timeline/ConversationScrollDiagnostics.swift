@@ -57,7 +57,7 @@ struct ConversationScrollDiagnosticsSection: View {
     var body: some View {
         Section {
             Toggle(L10n.text("ui.record_conversation_scroll"), isOn: $recording)
-                .onChange(of: recording) { _, enabled in
+                .onChange(of: recording) {enabled in
                     if enabled {
                         copied = false
                         ConversationScrollDiagnostics.shared.start()

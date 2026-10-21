@@ -1,4 +1,4 @@
-import Observation
+import Combine
 import SwiftUI
 import UIKit
 
@@ -9,11 +9,12 @@ import UIKit
 /// 不能越过的那条线，取下面两者中更低的一条：
 /// - 窗口里贴着顶部的导航栏下沿（iPhone push、iPad 侧栏和详情列都算）；
 /// - 页面登记的常驻区域下沿，例如会话页的缩略历史、额度、错误卡片。
+// 部署目标下调到 iOS 16.2 后不能用 `@Observable`（Observation 是 iOS 17）。
+// 这里退回 ObservableObject：只有保护区字典发变更通知，window 是纯读取用的弱引用。
 @MainActor
-@Observable
-final class InAppNoticePlacement {
-    private(set) var protectedRegionBottoms: [UUID: CGFloat] = [:]
-    @ObservationIgnored weak var window: UIWindow?
+final class InAppNoticePlacement: ObservableObject {
+    @Published private(set) var protectedRegionBottoms: [UUID: CGFloat] = [:]
+    weak var window: UIWindow?
 
     /// 登记或撤销（`bottom == nil`）一块常驻区域的下沿，使用全局坐标。
     func reportProtectedRegion(_ id: UUID, bottom: CGFloat?) {
@@ -83,7 +84,7 @@ extension View {
 }
 
 private struct InAppNoticePlacementScope: ViewModifier {
-    @State private var placement = InAppNoticePlacement()
+    @StateObject private var placement = InAppNoticePlacement()
 
     func body(content: Content) -> some View {
         content
@@ -105,7 +106,7 @@ private struct InAppNoticeProtectedRegion: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onGeometryChange(for: CGFloat.self) { geometry in
+            .compatOnGeometryChange(for: CGFloat.self) { geometry in
                 geometry.frame(in: .global).maxY
             } action: { bottom in
                 lastBottom = bottom

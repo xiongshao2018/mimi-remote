@@ -1,4 +1,4 @@
-import Observation
+import Combine
 import SwiftUI
 import UIKit
 
@@ -69,46 +69,48 @@ struct ConversationTimelineScrollScheduler {
 }
 
 /// 会话内唯一的程序滚动 owner。数据、布局和用户输入都在此决定，视图只执行命令。
+// 部署目标下调到 iOS 16.2 后不能用 `@Observable`（Observation 是 iOS 17），
+// 这里退回 ObservableObject + @Published：只有下面 6 个真正参与视图刷新的字段发变更通知，
+// 其余内部状态保持普通属性，语义与原来的 @ObservationIgnored 一致。
 @MainActor
-@Observable
-final class ConversationTimelineScrollController {
+final class ConversationTimelineScrollController: ObservableObject {
 #if DEBUG
     static var testingCommandObserver: ((ConversationTimelineScrollCommandRecord) -> Void)?
 #endif
 
-    private(set) var mode: ConversationTimelineScrollMode = .initialPositioning
-    private(set) var isInteracting = false
-    private(set) var isReadable = false
-    private(set) var isNearBottom = true
-    private(set) var hasUnseenTail = false
-    private(set) var epoch = 0
+    @Published private(set) var mode: ConversationTimelineScrollMode = .initialPositioning
+    @Published private(set) var isInteracting = false
+    @Published private(set) var isReadable = false
+    @Published private(set) var isNearBottom = true
+    @Published private(set) var hasUnseenTail = false
+    @Published private(set) var epoch = 0
 
     var canReturnToTail: Bool {
         isReadable && (mode == .readingHistory || hasUnseenTail || !isNearBottom)
     }
 
-    @ObservationIgnored let viewport = ConversationTimelineViewport()
-    @ObservationIgnored private let scheduler: ConversationTimelineScrollScheduler
-    @ObservationIgnored private(set) var scope: ScopedSessionID?
-    @ObservationIgnored private(set) var revision = 0
-    @ObservationIgnored private var isActive = false
-    @ObservationIgnored private var hasContent = false
-    @ObservationIgnored private var tail: ConversationTimelineTailDescriptor?
-    @ObservationIgnored private var rowIDs: [String] = []
-    @ObservationIgnored private var metrics: ConversationTimelineScrollMetrics?
-    @ObservationIgnored private var interactionStartOffset: CGFloat?
-    @ObservationIgnored private var ownsAnimation = false
-    @ObservationIgnored private var isTailVisible = false
-    @ObservationIgnored private var attemptedInitialPosition = false
-    @ObservationIgnored private var inputGeneration = 0
-    @ObservationIgnored private var anchor: ConversationTimelineViewport.Anchor?
-    @ObservationIgnored private var anchorFallbackItemID: String?
-    @ObservationIgnored private var pending: Pending?
-    @ObservationIgnored private var pendingWork: ConversationTimelineScrollScheduler.Cancellation?
-    @ObservationIgnored private var anchorExpiration: ConversationTimelineScrollScheduler.Cancellation?
-    @ObservationIgnored private var expansion: (input: Int, targetID: String?)?
-    @ObservationIgnored private var execute: ((ConversationTimelineScrollCommand) -> Void)?
-    @ObservationIgnored private var appliedCommands: Set<CommandKey> = []
+    let viewport = ConversationTimelineViewport()
+    private let scheduler: ConversationTimelineScrollScheduler
+    private(set) var scope: ScopedSessionID?
+    private(set) var revision = 0
+    private var isActive = false
+    private var hasContent = false
+    private var tail: ConversationTimelineTailDescriptor?
+    private var rowIDs: [String] = []
+    private var metrics: ConversationTimelineScrollMetrics?
+    private var interactionStartOffset: CGFloat?
+    private var ownsAnimation = false
+    private var isTailVisible = false
+    private var attemptedInitialPosition = false
+    private var inputGeneration = 0
+    private var anchor: ConversationTimelineViewport.Anchor?
+    private var anchorFallbackItemID: String?
+    private var pending: Pending?
+    private var pendingWork: ConversationTimelineScrollScheduler.Cancellation?
+    private var anchorExpiration: ConversationTimelineScrollScheduler.Cancellation?
+    private var expansion: (input: Int, targetID: String?)?
+    private var execute: ((ConversationTimelineScrollCommand) -> Void)?
+    private var appliedCommands: Set<CommandKey> = []
 
     init(scheduler: ConversationTimelineScrollScheduler = .live) {
         self.scheduler = scheduler
@@ -296,7 +298,7 @@ final class ConversationTimelineScrollController {
         confirmInitialPosition()
     }
 
-    func phaseChanged(_ phase: ScrollPhase, epoch expectedEpoch: Int? = nil) {
+    func phaseChanged(_ phase: CompatScrollPhase, epoch expectedEpoch: Int? = nil) {
         guard isActive, expectedEpoch == nil || expectedEpoch == epoch else { return }
         ConversationScrollDiagnostics.shared.record("phase", "\(phase)")
         let userDriven = Self.isUserDriven(phase) || (phase == .animating && !ownsAnimation)
@@ -326,11 +328,8 @@ final class ConversationTimelineScrollController {
         }
     }
 
-    static func isUserDriven(_ phase: ScrollPhase) -> Bool {
-        switch phase {
-        case .tracking, .interacting, .decelerating: true
-        case .idle, .animating: false
-        }
+    static func isUserDriven(_ phase: CompatScrollPhase) -> Bool {
+        phase.isUserDriven
     }
 
     func mediaLayoutWillChange() {

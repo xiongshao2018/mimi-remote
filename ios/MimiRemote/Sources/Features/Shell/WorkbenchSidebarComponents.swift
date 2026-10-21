@@ -345,7 +345,7 @@ struct WorkbenchSidebarContentLayout<Content: View, Footer: View>: View {
         if usesFloatingSurface {
             content
                 // 最后一行可以滚到按钮上方，但列表视口与背景仍完整延伸到底部。
-                .contentMargins(.bottom, 64, for: .scrollContent)
+                .compatContentMargins(.bottom, 64, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     footer
                 }
