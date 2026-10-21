@@ -114,7 +114,7 @@ private struct SettingsDetailPageModifier: ViewModifier {
             .frame(maxWidth: .infinity)
             // 必须挂在撑满的 frame 之后：挂在前面只会铺到中间那一列。
             .settingsCanvasBackground(tokens: tokens)
-            .contentMargins(
+            .compatContentMargins(
                 .bottom,
                 hasCompactTabBar ? max(bottomChromeClearance, SettingsLayoutMetrics.sectionSpacing) : SettingsLayoutMetrics.sectionSpacing,
                 for: .scrollContent
@@ -229,7 +229,7 @@ extension View {
     /// 卡片之间的距离只由 `SettingsGroupHeader` 决定。必须挂在离 Form 最近的位置，
     /// 外层的 listSectionSpacing 会被内层覆盖。
     func dividedSettingsList() -> some View {
-        listSectionSpacing(0)
+        .compatListSectionSpacing(0)
             .environment(\.defaultMinListHeaderHeight, 0)
     }
 }

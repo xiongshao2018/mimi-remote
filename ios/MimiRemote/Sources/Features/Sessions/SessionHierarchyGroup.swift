@@ -116,7 +116,7 @@ private struct SessionHierarchyRowDecoration: ViewModifier {
 
     private func toggleButton(childCount: Int, isExpanded: Bool, tokens: ThemeTokens) -> some View {
         Button {
-            withAnimation(.snappy(duration: 0.22)) {
+            withAnimation(.compatSnappy(duration: 0.22)) {
                 expansion.toggle(row.session.id)
             }
         } label: {

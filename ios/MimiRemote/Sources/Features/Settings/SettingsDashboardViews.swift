@@ -105,7 +105,7 @@ struct ConnectionSettingsView: View {
         .frame(maxWidth: isDevicesTab ? 920 : 720)
         .frame(maxWidth: .infinity)
         .settingsCanvasBackground(tokens: tokens)
-        .contentMargins(
+        .compatContentMargins(
             .bottom,
             hasCompactTabBar ? bottomChromeClearance : WorkbenchPageLayout.regularPadding,
             for: .scrollContent

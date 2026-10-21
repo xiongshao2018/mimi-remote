@@ -86,7 +86,7 @@ struct WorktreeManagerSheet: View {
             .background(tokens.background)
             .overlay {
                 if worktrees.isEmpty && !sessionStore.isRefreshingWorktrees {
-                    ContentUnavailableView(
+                    CompatContentUnavailableView(
                         L10n.text("ui.no_git_worktree"),
                         systemImage: "square.stack.3d.up",
                         description: Text(L10n.text("ui.there_are_no_managed_git_worktrees_for_the"))
@@ -235,7 +235,7 @@ struct WorktreeCleanupPreviewSheet: View {
 
                 Section {
                     if projectItems.isEmpty {
-                        ContentUnavailableView(
+                        CompatContentUnavailableView(
                             L10n.text("ui.no_evaluable_worktree"),
                             systemImage: "checkmark.shield",
                             description: Text(L10n.text("ui.the_current_project_has_no_managed_worktrees_that"))
@@ -594,7 +594,7 @@ struct CreateWorktreeSheet: View {
                 await sessionStore.refreshWorktreeBranches(path: project.path)
                 applyDefaultBaseIfNeeded()
             }
-            .onChange(of: branchList?.defaultBase ?? "") { _, _ in
+            .onChange(of: branchList?.defaultBase ?? "") {_ in
                 applyDefaultBaseIfNeeded()
             }
         }

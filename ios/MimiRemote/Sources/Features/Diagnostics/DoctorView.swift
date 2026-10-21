@@ -606,7 +606,7 @@ struct DoctorView: View {
         systemImage: String,
         tokens: ThemeTokens
     ) -> some View {
-        ContentUnavailableView {
+        CompatContentUnavailableView {
             Label(title, systemImage: systemImage)
         } description: {
             Text(message)

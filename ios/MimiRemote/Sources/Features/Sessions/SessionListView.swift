@@ -284,13 +284,13 @@ struct SessionListView: View {
             OpenWorkspaceSheet()
         }
         // 与工作区共用同一条宽度判据；量到之后 rowDensity 就不再依赖页面身份。
-        .onGeometryChange(for: CGFloat.self) { geometry in
+        .compatOnGeometryChange(for: CGFloat.self) { geometry in
             geometry.size.width
         } action: { newWidth in
             guard newWidth > 0 else { return }
             measuredContentWidth = newWidth
         }
-        .listSectionSpacing(12)
+        .compatListSectionSpacing(12)
         // 最新设计把日期恢复成轻量粘性标题，正文保持完全扁平；行距与分隔线由行组件统一控制。
         .listRowSpacing(0)
         .scrollContentBackground(.hidden)
@@ -298,7 +298,7 @@ struct SessionListView: View {
         .background(tokens.workbenchCanvasBackground.ignoresSafeArea())
         .workbenchClearBottomScrollEdge()
         // 只有按钮真的浮在内容之上时才多让一段，最后一条会话才能滚到按钮之上被读到。
-        .contentMargins(
+        .compatContentMargins(
             .bottom,
             bottomContentMargin
                 + (hasBottomTabBar ? 0 : WorkspaceSessionFabMetrics.contentBottomAllowance),
@@ -320,12 +320,12 @@ struct SessionListView: View {
                 dismissSessionSearchKeyboard()
             }
         )
-        .focusable()
+        .compatFocusableForListKeyboard()
         .focused($hasListKeyboardFocus)
-        .onKeyPress(keys: [.upArrow, .downArrow, .return]) { keyPress in
-            handleListKeyPress(keyPress)
+        .compatOnArrowAndReturnKeyPress { key in
+            handleListKeyPress(key)
         }
-        .onScrollPhaseChange { _, newPhase in
+        .compatOnScrollPhaseChange { newPhase in
             lifecycleCoordinator.setScrollPhase(
                 newPhase,
                 latestMembership: lifecycleInput.membership
@@ -417,13 +417,13 @@ struct SessionListView: View {
                 isForeground: false
             )
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) {phase in
             sessionStore.updateNativeHarnessDirectoryVisibility(
                 isListVisible: isNativeDirectoryListVisible,
                 isForeground: isNativeDirectoryListVisible && phase == .active
             )
         }
-        .onChange(of: lifecycleInput) { _, newInput in
+        .onChange(of: lifecycleInput) {newInput in
             synchronizeLifecycle(newInput)
         }
     }
@@ -731,7 +731,7 @@ struct SessionListView: View {
             .padding(.vertical, 16)
             .accessibilityIdentifier("sessions.empty.workspaceSuggestions")
         case .needsWorkspace:
-            ContentUnavailableView {
+            CompatContentUnavailableView {
                 Label(L10n.text("ui.no_workspace_has_been_opened_yet"), systemImage: "folder.badge.plus")
                     .accessibilityIdentifier("sessions.empty.needsWorkspace")
             } description: {
@@ -747,7 +747,7 @@ struct SessionListView: View {
                 .accessibilityIdentifier("sessions.empty.openWorkspaces")
             }
         case .noSessions:
-            ContentUnavailableView {
+            CompatContentUnavailableView {
                 Label(L10n.text("ui.no_sessions_yet"), systemImage: "bubble.left.and.bubble.right")
             } description: {
                 Text(L10n.text("ui.new_sessions_created_from_a_workspace_appear_here"))
@@ -762,7 +762,7 @@ struct SessionListView: View {
             }
             .accessibilityIdentifier("sessions.empty.noSessions")
         case .noMatches:
-            ContentUnavailableView {
+            CompatContentUnavailableView {
                 Label(L10n.text("ui.no_matching_session"), systemImage: "magnifyingglass")
             } description: {
                 Text(L10n.text("ui.try_changing_keywords_or_filter_conditions"))
@@ -798,7 +798,7 @@ struct SessionListView: View {
         systemImage: String,
         tokens: ThemeTokens
     ) -> some View {
-        ContentUnavailableView {
+        CompatContentUnavailableView {
             Label(title, systemImage: systemImage)
         } description: {
             Text(message)
@@ -942,22 +942,20 @@ struct SessionListView: View {
         ).map(\.session)
     }
 
-    private func handleListKeyPress(_ keyPress: KeyPress) -> KeyPress.Result {
-        switch keyPress.key {
+    private func handleListKeyPress(_ key: CompatKeyPressKey) -> Bool {
+        switch key {
         case .upArrow:
             moveKeyboardSelection(by: -1)
-            return .handled
+            return true
         case .downArrow:
             moveKeyboardSelection(by: 1)
-            return .handled
-        case .return:
+            return true
+        case .returnKey:
             guard let session = keyboardSelectedSession ?? orderedVisibleSessions.first else {
-                return .ignored
+                return false
             }
             select(session)
-            return .handled
-        default:
-            return .ignored
+            return true
         }
     }
 
@@ -1310,7 +1308,7 @@ struct SessionRenameSheet: View {
                     }
                 }
             }
-            .onChange(of: name) { _, _ in
+            .onChange(of: name) {_ in
                 failure = nil
             }
             .navigationTitle(L10n.text("ui.rename_session"))
@@ -1346,7 +1344,7 @@ struct SessionRenameSheet: View {
             // 弹窗挡住了顶部提示：原因改在输入框下方展示，并收起被遮住的那一条，避免关闭后重复弹出。
             self.failure = failure
             sessionStore.dismissOperationFeedback(id: failure.id)
-            AccessibilityNotification.Announcement(failure.message).post()
+            CompatAccessibility.announce(failure.message)
         }
     }
 }

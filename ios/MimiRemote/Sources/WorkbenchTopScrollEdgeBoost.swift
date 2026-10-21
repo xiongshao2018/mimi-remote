@@ -166,11 +166,11 @@ struct WorkbenchSidebarTopScrollEdgeFade: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onScrollGeometryChange(for: Double.self) { geometry in
+            .compatOnScrollGeometryChange(for: Double.self) { geometry in
                 WorkbenchTopScrollEdgeBoostRamp.intensity(
                     forUnderlap: geometry.contentOffset.y + geometry.contentInsets.top
                 )
-            } action: { _, newIntensity in
+            } action: { newIntensity in
                 intensity = newIntensity
             }
             .overlay(alignment: .top) {

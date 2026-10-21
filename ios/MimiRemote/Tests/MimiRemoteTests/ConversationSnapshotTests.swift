@@ -1705,7 +1705,7 @@ final class ConversationSnapshotTests: SimplifiedChineseSnapshotTestCase {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
-            .contentMargins(.leading, 0, for: .scrollContent)
+            .compatContentMargins(.leading, 0, for: .scrollContent)
             .environment(\.defaultMinListRowHeight, 40)
             .frame(maxHeight: .infinity)
 

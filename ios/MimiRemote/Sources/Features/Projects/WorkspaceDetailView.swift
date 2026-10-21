@@ -147,7 +147,7 @@ struct WorkspaceDetailView<StatusLine: View>: View {
                 // 首屏窗口还没凑满：稳定显示骨架屏，避免切换时先渲染欠填的半截列表再逐批变多。
                 recentSessionPlaceholders(rowDensity: rowDensity, tokens: tokens)
             } else if recentSessions.isEmpty, case .failed(let message) = sessionLoadState {
-                ContentUnavailableView {
+                CompatContentUnavailableView {
                     Label(L10n.text("ui.unable_to_load_session"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(message)
@@ -157,7 +157,7 @@ struct WorkspaceDetailView<StatusLine: View>: View {
                 // 空态是这段列表的替身，不是另一个模块；列表已经不套卡，它也不该套。
                 .frame(maxWidth: .infinity, minHeight: 150)
             } else if recentSessions.isEmpty {
-                ContentUnavailableView(L10n.text("ui.no_sessions_yet"), systemImage: "bubble.left.and.bubble.right", description: Text(L10n.text("ui.after_a_new_session_is_created_in_this")))
+                CompatContentUnavailableView(L10n.text("ui.no_sessions_yet"), systemImage: "bubble.left.and.bubble.right", description: Text(L10n.text("ui.after_a_new_session_is_created_in_this")))
                     .frame(maxWidth: .infinity, minHeight: 150)
             } else {
                 groupedSessionSections(

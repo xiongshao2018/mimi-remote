@@ -18,7 +18,7 @@ struct ConversationTimelineView: View {
     @State private var pendingFileActivityID: String?
     @State private var timelineItemCache = ConversationTimelineItemCache()
     @State private var presentedSnapshot = ConversationTimelineSnapshot.empty
-    @State private var scrollController = ConversationTimelineScrollController()
+    @StateObject private var scrollController = ConversationTimelineScrollController()
     @Environment(\.conversationDetailedTranscript) private var detailedTranscript
 
     private var showsDetailedTranscript: Bool { detailedTranscript.wrappedValue }
@@ -158,7 +158,7 @@ struct ConversationTimelineView: View {
                                 }
                                 .frame(width: 0, height: 0)
                             }
-                            .onScrollVisibilityChange(threshold: 0.5) { isVisible in
+                            .compatOnScrollVisibilityChange(threshold: 0.5) { isVisible in
                                 scrollController.tailVisibilityChanged(
                                     isVisible,
                                     epoch: timelineListIdentity.presentationGeneration
@@ -180,7 +180,7 @@ struct ConversationTimelineView: View {
                 .environment(\.defaultMinListRowHeight, 0)
                 // 支持该语义的系统会在 List 首次提交前计算底部 offset；其余系统由下方
                 // 的稳定遮罩兜住首次布局，不能让尚未贴底的正文成为可读画面。
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .compatDefaultScrollAnchor(.bottom, for: .initialOffset)
                 // 每个会话使用独立的 List 身份，避免复用上一个会话的 contentOffset；
                 // 空占位变成正文时也重建一次，让未缓存会话重新应用初始底部锚点。
                 .id(timelineListIdentity)
@@ -200,15 +200,15 @@ struct ConversationTimelineView: View {
                 })
                 // 是否贴近底部用滚动几何实时判断，只在贴底时跟随流式输出，
                 // 用户上翻历史时不会被尾部更新甩回底部。
-                .onScrollGeometryChange(for: ConversationTimelineScrollMetrics.self) { geometry in
+                .compatOnScrollGeometryChange(for: ConversationTimelineScrollMetrics.self) { geometry in
                     scrollMetrics(for: geometry)
-                } action: { _, metrics in
+                } action: { metrics in
                     scrollController.geometryChanged(
                         metrics,
                         epoch: timelineListIdentity.presentationGeneration
                     )
                 }
-                .onScrollPhaseChange { _, phase in
+                .compatOnScrollPhaseChange { phase in
                     scrollController.phaseChanged(phase, epoch: timelineListIdentity.presentationGeneration)
                 }
 
@@ -233,10 +233,10 @@ struct ConversationTimelineView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .onChange(of: incomingIdentity, initial: true) { _, _ in
+            .compatOnChange(of: incomingIdentity, initial: true) { _ in
                 publishTimelineSource(source, provider: timelineProvider, activeTurn: activeTurn)
             }
-            .onChange(of: timelineListIdentity, initial: true) { _, identity in
+            .compatOnChange(of: timelineListIdentity, initial: true) { identity in
                 connectScrollCommands(proxy: proxy, epoch: identity.presentationGeneration)
             }
             .onAppear {
@@ -481,7 +481,8 @@ struct ConversationTimelineView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func scrollMetrics(for geometry: ScrollGeometry) -> ConversationTimelineScrollMetrics {
+    // 兼容层已经把原生 ScrollGeometry 折成同一组字段，这里只认兼容快照一套签名。
+    private func scrollMetrics(for geometry: CompatScrollGeometry) -> ConversationTimelineScrollMetrics {
         // 距底部多远用滚动几何直接算，不依赖某个具体行是否还被实例化。
         let distanceFromBottom = geometry.contentSize.height - geometry.visibleRect.maxY
         let minimumOffsetY = -geometry.contentInsets.top
@@ -603,7 +604,7 @@ struct ConversationTimelineView: View {
                 .foregroundStyle(workbenchSecondaryText)
                 .accessibilityIdentifier("conversation.historyLoadFailed")
         } else if let error = sessionStore.errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !error.isEmpty {
-            ContentUnavailableView {
+            CompatContentUnavailableView {
                 Label(L10n.text("ui.session_record_loading_failed"), systemImage: "exclamationmark.triangle")
             } description: {
                 // 只展示翻译后的结论；原始错误在顶部错误条的「显示详情」里（#508）。
@@ -776,7 +777,7 @@ struct ConversationHistoryAnchorGeometryModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if isEnabled {
-            content.onGeometryChange(for: CGRect.self) { geometry in
+            content.compatOnGeometryChange(for: CGRect.self) { geometry in
                 geometry.frame(in: .global)
             } action: { frame in
                 geometryState.latestFrame = frame
@@ -784,7 +785,7 @@ struct ConversationHistoryAnchorGeometryModifier: ViewModifier {
                     action(messageIDs, frame)
                 }
             }
-            .onScrollVisibilityChange(threshold: 0.01) { visible in
+            .compatOnScrollVisibilityChange(threshold: 0.01) { visible in
                 geometryState.isVisible = visible
                 if visible, !geometryState.latestFrame.isNull {
                     action(messageIDs, geometryState.latestFrame)

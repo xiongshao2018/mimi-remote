@@ -314,13 +314,13 @@ struct InitialConnectionSettingsSections: View {
                 sessionStore.pairingLinkAttempt = .idle
             }
         }
-        .onChange(of: appStore.activeConnectionProfileID) { _, _ in
+        .onChange(of: appStore.activeConnectionProfileID) {_ in
             loadInitialConnectionIfNeeded()
         }
-        .onChange(of: appStore.endpoint) { _, _ in
+        .onChange(of: appStore.endpoint) {_ in
             loadInitialConnectionIfNeeded()
         }
-        .onChange(of: appStore.token) { _, _ in
+        .onChange(of: appStore.token) {_ in
             loadInitialConnectionIfNeeded()
         }
         .onDisappear {

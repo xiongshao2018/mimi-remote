@@ -558,14 +558,35 @@ struct MessageMenuLift: ViewModifier {
                     .opacity(isPresented && role == .assistant ? 1 : 0)
             }
             .shadow(color: .black.opacity(isPresented ? (colorScheme == .dark ? 0.3 : 0.14) : 0), radius: 12, y: 6)
-            .visualEffect { effect, geometry in
+            .modifier(MessageMenuLiftTransform(moves: moves, growsFromTrailing: role == .user))
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.28, dampingFraction: 1), value: isPresented)
+    }
+}
+
+/// 菜单展开时把气泡抬起一点。
+///
+/// iOS 17+ 用 `visualEffect`：只改显示层，不触发布局重排，放大上限还能按实际尺寸算。
+/// iOS 16 没有该 API，退化成固定倍率的 `scaleEffect`/`offset`——会参与布局，
+/// 但气泡在菜单展开期间本来就被浮层盖住，1.5% 的差别读不出来。
+private struct MessageMenuLiftTransform: ViewModifier {
+    let moves: Bool
+    let growsFromTrailing: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            content.visualEffect { effect, geometry in
                 // 只变换显示层；长回复最多放大 8pt，避免远离按下位置，也不触发布局重排。
                 effect
                     .scaleEffect(moves ? 1 + min(0.015, 8 / max(1, geometry.size.width, geometry.size.height)) : 1,
-                                 anchor: role == .user ? .trailing : .leading)
+                                 anchor: growsFromTrailing ? .trailing : .leading)
                     .offset(y: moves ? -3 : 0)
             }
-            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.28, dampingFraction: 1), value: isPresented)
+        } else {
+            content
+                .scaleEffect(moves ? 1.015 : 1, anchor: growsFromTrailing ? .trailing : .leading)
+                .offset(y: moves ? -3 : 0)
+        }
     }
 }
 

@@ -70,7 +70,7 @@ struct SessionJumpPanel: View {
             VStack(spacing: 0) {
                 searchField(tokens: tokens, ordered: ordered)
                 if ordered.isEmpty {
-                    ContentUnavailableView(L10n.text("ui.no_matching_session"), systemImage: "magnifyingglass")
+                    CompatContentUnavailableView(L10n.text("ui.no_matching_session"), systemImage: "magnifyingglass")
                         .frame(maxHeight: .infinity)
                 } else {
                     resultList(groups: groups, ordered: ordered, tokens: tokens)
@@ -87,7 +87,7 @@ struct SessionJumpPanel: View {
             }
         }
         .onAppear { isSearchFocused = true }
-        .onChange(of: query) { _, _ in highlightedIndex = 0 }
+        .onChange(of: query) {_ in highlightedIndex = 0 }
     }
 
     private func searchField(tokens: ThemeTokens, ordered: [AgentSession]) -> some View {
@@ -101,13 +101,16 @@ struct SessionJumpPanel: View {
                 .focused($isSearchFocused)
                 .submitLabel(.go)
                 .onSubmit { openHighlighted(in: ordered) }
-                .onKeyPress(.downArrow) {
-                    moveHighlight(by: 1, count: ordered.count)
-                    return .handled
-                }
-                .onKeyPress(.upArrow) {
-                    moveHighlight(by: -1, count: ordered.count)
-                    return .handled
+                .compatOnArrowKeyPress { key in
+                    switch key {
+                    case .upArrow:
+                        moveHighlight(by: -1, count: ordered.count)
+                    case .downArrow:
+                        moveHighlight(by: 1, count: ordered.count)
+                    case .returnKey:
+                        return false
+                    }
+                    return true
                 }
                 .accessibilityIdentifier("sessionJump.search")
         }
@@ -138,7 +141,7 @@ struct SessionJumpPanel: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .onChange(of: highlightedID) { _, id in
+            .onChange(of: highlightedID) {id in
                 guard let id else { return }
                 proxy.scrollTo(id)
             }

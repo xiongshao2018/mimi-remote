@@ -328,7 +328,7 @@ struct CapabilitiesView: View {
             Section {
                 let skills = sessionStore.capabilityList?.skills ?? []
                 if skills.isEmpty {
-                    ContentUnavailableView(L10n.text("ui.skills_not_found"), systemImage: "wand.and.stars")
+                    CompatContentUnavailableView(L10n.text("ui.skills_not_found"), systemImage: "wand.and.stars")
                         .font(themeStore.uiFont(.caption))
                 } else {
                     ForEach(skills) { skill in
@@ -349,7 +349,7 @@ struct CapabilitiesView: View {
             Section {
                 let servers = sessionStore.capabilityList?.mcpServers ?? []
                 if servers.isEmpty {
-                    ContentUnavailableView(L10n.text("ui.mcp_server_not_found"), systemImage: "point.3.connected.trianglepath.dotted")
+                    CompatContentUnavailableView(L10n.text("ui.mcp_server_not_found"), systemImage: "point.3.connected.trianglepath.dotted")
                         .font(themeStore.uiFont(.caption))
                 } else {
                     ForEach(servers) { server in
@@ -655,7 +655,7 @@ struct AppearanceView: View {
                         .padding(.trailing, 12)
                     }
                     .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                    .compatScrollBounceBehavior(.basedOnSize, axes: .horizontal)
                     .onAppear {
                         var transaction = Transaction()
                         transaction.disablesAnimations = true
@@ -665,7 +665,7 @@ struct AppearanceView: View {
                             scrollProxy.scrollTo(selectedWorkspaceIconStyle.id, anchor: .center)
                         }
                     }
-                    .onGeometryChange(for: CGFloat.self) { proxy in
+                    .compatOnGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.width
                     } action: { width in
                         guard width > 0, workspaceIconStyleViewportWidth != width else { return }
@@ -1264,7 +1264,7 @@ struct DefaultModelSettingsView: View {
         .onAppear {
             normalizeStoredEfforts()
         }
-        .onChange(of: sessionStore.appServerModelOptions) { _, _ in
+        .onChange(of: sessionStore.appServerModelOptions) {_ in
             normalizeStoredEfforts()
         }
         .task(id: catalogLoadKey) {

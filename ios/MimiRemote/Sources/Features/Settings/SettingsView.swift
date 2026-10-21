@@ -419,7 +419,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(canvasBackground.ignoresSafeArea())
         // 紧凑 Tab 下允许内容经过玻璃栏，但最后一组必须能完整滚到栏上方。
-        .contentMargins(
+        .compatContentMargins(
             .bottom,
             hasCompactTabBar ? bottomChromeClearance : WorkbenchPageLayout.regularPadding,
             for: .scrollContent
@@ -1385,7 +1385,7 @@ struct AdvancedDevelopmentSettingsView: View {
                 ConversationScrollDiagnosticsSection()
             }
         }
-        .onChange(of: developerModeEnabled) { _, enabled in
+        .onChange(of: developerModeEnabled) {enabled in
             if !enabled { ConversationScrollDiagnostics.shared.stop() }
         }
         .themedSettingsForm(tokens: tokens)

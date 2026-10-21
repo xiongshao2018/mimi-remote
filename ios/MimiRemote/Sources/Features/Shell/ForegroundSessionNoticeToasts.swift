@@ -62,7 +62,7 @@ private struct ForegroundSessionNoticeToastHost: ViewModifier {
                 adapter.dismissForegroundNotice(id)
             }
             .onAppear(perform: updateHostAvailability)
-            .onChange(of: scenePhase) { _, _ in
+            .onChange(of: scenePhase) {_ in
                 updateHostAvailability()
             }
             .onDisappear {

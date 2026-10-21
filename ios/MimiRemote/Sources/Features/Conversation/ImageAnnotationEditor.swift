@@ -36,7 +36,7 @@ struct ImageAnnotationEditor: View {
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .onAppear { canvasSize = fitted }
-                .onChange(of: fitted) { _, size in canvasSize = size }
+                .onChange(of: fitted) {size in canvasSize = size }
             }
             .background(Color.black.opacity(colorScheme == .dark ? 1 : 0.92))
             .navigationTitle(L10n.text("ui.annotate_image"))

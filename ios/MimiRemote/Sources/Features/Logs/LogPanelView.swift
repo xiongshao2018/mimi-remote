@@ -308,7 +308,7 @@ struct LogTailContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     if lines.isEmpty {
-                        ContentUnavailableView(
+                        CompatContentUnavailableView(
                             L10n.text("ui.no_logs_yet"),
                             systemImage: "terminal",
                             description: Text(L10n.text("ui.there_is_no_terminal_output_for_the_current"))
@@ -328,10 +328,10 @@ struct LogTailContentView: View {
                 .padding(8)
             }
             .background(themeStore.tokens(for: colorScheme).background)
-            .onChange(of: lines.count) { _, _ in
+            .onChange(of: lines.count) {_ in
                 scrollToBottom(proxy)
             }
-            .onChange(of: lines.last?.text) { _, _ in
+            .onChange(of: lines.last?.text) {_ in
                 scrollToBottom(proxy)
             }
         }

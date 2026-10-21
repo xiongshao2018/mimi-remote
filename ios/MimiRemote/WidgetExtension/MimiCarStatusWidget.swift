@@ -63,7 +63,7 @@ private struct MimiCarStatusWidgetView: View {
             statusRow
         }
         .padding(14)
-        .containerBackground(for: .widget) {
+        .mimiWidgetContainerBackground {
             Color(.secondarySystemBackground)
         }
         .accessibilityElement(children: .combine)
@@ -188,7 +188,8 @@ private struct MimiCarStatusWidget: Widget {
         .description(WidgetL10n.text("widget.car_status.description"))
         .supportedFamilies([.systemSmall])
         // CarPlay 等系统表面可移除背景；内容不依赖卡片底色表达状态。
-        .containerBackgroundRemovable(true)
+        // `containerBackgroundRemovable(_:)` 是 iOS 17 API，且系统默认就是可移除，
+        // 下调部署目标后这里不再显式声明（见文件末尾的兼容说明）。
     }
 }
 
@@ -223,5 +224,22 @@ private extension CarStatusSnapshotV1 {
             activityDate: .now.addingTimeInterval(-2 * 60),
             publishedAt: publishedAt
         )
+    }
+}
+
+// MARK: - iOS 16.2 兼容（Widget 扩展独立编译，不能引用 App 里的 Core/Compat）
+
+extension View {
+    /// `containerBackground(for: .widget)` 是 iOS 17；iOS 16 的 Widget 没有容器背景概念，
+    /// 底板由系统按样式给出，这里保持系统默认，不额外铺色。
+    @ViewBuilder
+    func mimiWidgetContainerBackground<Background: View>(
+        @ViewBuilder _ content: () -> Background
+    ) -> some View {
+        if #available(iOS 17.0, *) {
+            self.containerBackground(for: .widget, content: content)
+        } else {
+            self
+        }
     }
 }

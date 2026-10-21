@@ -424,8 +424,8 @@ struct AdvancedTurnOptionsSheet: View {
                 }
             }
             .navigationTitle(L10n.text("ui.advanced_options"))
-            .onChange(of: draft.model) { _, _ in normalizeCatalogCapabilities() }
-            .onChange(of: draft.runtimeProvider) { _, _ in normalizeCatalogCapabilities() }
+            .onChange(of: draft.model) {_ in normalizeCatalogCapabilities() }
+            .onChange(of: draft.runtimeProvider) {_ in normalizeCatalogCapabilities() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L10n.text("ui.cancel")) { dismiss() }

@@ -39,7 +39,7 @@ struct ConversationLiveStatusRow: View {
                         .foregroundStyle(isWarning ? tokens.warning : tokens.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .contentTransition(.identity)
+                        .compatContentTransition(.identity)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(text)
@@ -122,7 +122,7 @@ struct ConversationLiveStatusGlyph: View {
                 Self.draw(in: &graphics, size: size, time: time, animates: runsClock, tint: tint)
             }
         }
-        .onScrollVisibilityChange(threshold: 0.01) { isVisible = $0 }
+        .compatOnScrollVisibilityChange(threshold: 0.01) { isVisible = $0 }
         .onDisappear { isVisible = false }
         .accessibilityHidden(true)
     }
