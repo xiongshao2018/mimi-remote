@@ -1,0 +1,152 @@
+name: iOS TrollStore IPA
+
+# 面向没有 Mac 的开发机：macOS runner 只负责编译出未签名的真机 .app，
+# 打包成 IPA 后由本机 scripts/ios-trollstore-package.sh 用 ldid 注入 entitlement
+# 并伪签名，最后交给 TrollStore 安装。这里不申请描述文件，也不做 App Store 签名。
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: "构建配置"
+        required: false
+        default: "Debug"
+        type: choice
+        options:
+          - Debug
+          - Release
+      target_ios_version:
+        description: "手机的 iOS 版本；产物的最低系统要求必须不高于它"
+        required: true
+        default: "16.2"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-trollstore-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-device-app:
+    name: Build unsigned iPhone .app for TrollStore
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - name: Setup Go for Tailcat
+        # 工程的 preBuild 阶段调用 scripts/build-tailcat-mobile.sh 生成
+        # TailcatMobile.xcframework（静态框架），缺 Go 会在编译前失败。
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: experiments/tailcat/go.mod
+          cache-dependency-path: experiments/tailcat/go.sum
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          go version
+
+      - name: Build for iPhone without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 真机产物只要求能编译并链接进静态 Tailcat 框架；签名交给本机的 ldid，
+          # 所以这里显式关掉签名与描述文件解析，避免 CI 需要 Apple 账号。
+          xcodebuild \
+            -project ios/MimiRemote/MimiRemote.xcodeproj \
+            -scheme MimiRemote \
+            -configuration "${{ inputs.configuration }}" \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/trollstore-derived" \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            build
+
+      - name: Verify product and minimum OS requirement
+        shell: bash
+        env:
+          TARGET_IOS_VERSION: ${{ inputs.target_ios_version }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/trollstore-derived/Build/Products/iphoneos/MimiRemote.app"
+          [[ -d "$app" ]] || { echo "找不到真机产物：$app" >&2; exit 1; }
+
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          short_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")"
+          build_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")"
+          minimum_os="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$app/Info.plist")"
+          architectures="$(lipo -archs "$app/$executable")"
+
+          # TrollStore 只按 Mach-O 装载，arm64e 切片需要重签名工具链支持；
+          # 真机标准构建产出 arm64，可直接在 16.x 设备上运行。
+          [[ "$architectures" == "arm64" ]] || {
+            echo "期望 arm64 产物，实际为：$architectures" >&2
+            exit 1
+          }
+
+          # 最低系统要求高于手机系统版本时，安装会被系统拒绝。这里提前拦住，
+          # 免得把 18.0 的产物搬到 16.x 手机上才发现装不上。
+          if [[ "$(printf '%s\n%s\n' "$minimum_os" "$TARGET_IOS_VERSION" | sort -V | head -n 1)" != "$minimum_os" ]]; then
+            echo "产物最低系统要求 $minimum_os 高于手机 iOS $TARGET_IOS_VERSION；请先合入下调 deployment target 的分支" >&2
+            exit 1
+          fi
+
+          extension_count=0
+          if [[ -d "$app/PlugIns" ]]; then
+            while IFS= read -r appex; do
+              extension_count=$((extension_count + 1))
+              appex_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$appex/Info.plist")"
+              [[ -x "$appex/$appex_executable" ]] || {
+                echo "扩展缺少可执行文件：$appex" >&2
+                exit 1
+              }
+            done < <(find "$app/PlugIns" -maxdepth 1 -name '*.appex' -type d | sort)
+          fi
+          [[ "$extension_count" -eq 2 ]] || {
+            echo "期望 2 个内置扩展（推送与小组件），实际为 $extension_count" >&2
+            exit 1
+          }
+
+          {
+            echo "bundle_id=$bundle_id"
+            echo "version=$short_version ($build_version)"
+            echo "minimum_os_version=$minimum_os"
+            echo "architectures=$architectures"
+            echo "embedded_extensions=$extension_count"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/trollstore-derived/Build/Products/iphoneos/MimiRemote.app"
+          payload_dir="$RUNNER_TEMP/trollstore-payload"
+          rm -rf "$payload_dir"
+          mkdir -p "$payload_dir/Payload"
+          cp -a "$app" "$payload_dir/Payload/"
+          chmod -R a+x "$payload_dir/Payload"
+          (
+            cd "$payload_dir"
+            zip -qry "$RUNNER_TEMP/MimiRemote-trollstore-unsigned.ipa" Payload
+          )
+          shasum -a 256 "$RUNNER_TEMP/MimiRemote-trollstore-unsigned.ipa"
+          printf 'unsigned IPA: %s\n' "$RUNNER_TEMP/MimiRemote-trollstore-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mimi-trollstore-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/MimiRemote-trollstore-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

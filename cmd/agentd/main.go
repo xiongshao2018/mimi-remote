@@ -715,7 +715,7 @@ func runPair(args []string) error {
 func runPairWithWriters(args []string, stdout io.Writer, stderr io.Writer) error {
 	fs := flag.NewFlagSet("pair", flag.ExitOnError)
 	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
-	networkName := fs.String("network", string(agentsetup.PairingNetworkAuto), "二维码网络：auto、tailscale 或 lan")
+	networkName := fs.String("network", string(agentsetup.PairingNetworkAuto), "二维码网络：auto、tailscale、lan 或 public（公网 IP 直连，需先 agentd public --enabled=true）")
 	asJSON := fs.Bool("json", false, "输出 JSON")
 	qrOnly := fs.Bool("qr-only", false, "只输出短期配对信息和二维码，不输出长期 Token")
 	if err := fs.Parse(args[1:]); err != nil {
