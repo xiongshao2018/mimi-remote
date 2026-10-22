@@ -352,7 +352,11 @@ extension View {
         action: @escaping (Bool) -> Void
     ) -> some View {
         if #available(iOS 18.0, *) {
-            self.onScrollVisibilityChange(threshold: threshold, action: action)
+            // Apple Docs 实测签名是 `onScrollVisibilityChange(threshold: Double = 0.5, _ action:)`，
+            // 第二个参数没有外部标签，写成 `action:` 会报 extraneous argument label。
+            self.onScrollVisibilityChange(threshold: threshold) { visible in
+                action(visible)
+            }
         } else {
             background(
                 CompatScrollObservationRepresentable(
