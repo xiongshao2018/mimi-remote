@@ -22,6 +22,7 @@ func runPublicWithWriters(args []string, stdout, stderr io.Writer) error {
 	enabled := fs.Bool("enabled", false, "是否允许手机从公网 IP 直连（HTTPS）")
 	listen := fs.String("listen", "", "公网 TLS 绑定地址，例如 0.0.0.0:8443；留空使用默认端口")
 	advertise := fs.String("advertise", "", "手机要连的公网地址，可带端口；NAT 或弹性 IP 必须显式写明")
+	termination := fs.String("tls-termination", "", "HTTPS 由谁终结：self_signed（默认，agentd 自签并监听公网端口）或 tunnel（隧道终结，本机不监听公网端口，证书由隧道提供商签发）")
 	restore := fs.String("restore-state", "", "恢复先前公网设置的事务结果 JSON")
 	statusOnly := fs.Bool("status", false, "只查询当前公网入口，不修改配置")
 	asJSON := fs.Bool("json", false, "输出 JSON")
@@ -77,7 +78,7 @@ func runPublicWithWriters(args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 		}
-		result, err = agentsetup.ConfigurePublicAccess(*path, *enabled, *listen, *advertise)
+		result, err = agentsetup.ConfigurePublicAccess(*path, *enabled, *listen, *advertise, *termination)
 	}
 	if err != nil {
 		return err
@@ -85,7 +86,12 @@ func runPublicWithWriters(args []string, stdout, stderr io.Writer) error {
 	if *asJSON {
 		return printJSONTo(stdout, result)
 	}
-	fmt.Fprintf(stdout, "公网直连：%t，绑定 %s\n", result.Enabled, result.Listen)
+	fmt.Fprintf(stdout, "公网直连：%t，TLS 终结方式 %s\n", result.Enabled, result.TLSTermination)
+	if result.Listen != "" {
+		fmt.Fprintf(stdout, "本机公网监听：%s\n", result.Listen)
+	} else {
+		fmt.Fprintln(stdout, "本机不监听公网端口：由隧道客户端把公网域名回源到本机明文端口")
+	}
 	if result.Advertise != "" {
 		fmt.Fprintf(stdout, "公网地址：%s\n", result.Advertise)
 	}
@@ -108,9 +114,14 @@ func printPublicAccessState(stdout io.Writer, asJSON bool, state agentsetup.Publ
 	if !state.Enabled {
 		fmt.Fprintln(stdout, "公网直连：关闭")
 		fmt.Fprintln(stdout, "  开启：agentd public --enabled=true --advertise <公网IP>")
+		fmt.Fprintln(stdout, "  隧道：agentd public --enabled=true --advertise <隧道域名> --tls-termination=tunnel")
 		return nil
 	}
-	fmt.Fprintf(stdout, "公网直连：开启，绑定 %s\n", state.Listen)
+	if state.TLSTermination == config.PublicTLSTerminationTunnel {
+		fmt.Fprintln(stdout, "公网直连：开启，TLS 由隧道终结（本机不监听公网端口，证书由隧道提供商签发）")
+	} else {
+		fmt.Fprintf(stdout, "公网直连：开启，绑定 %s\n", state.Listen)
+	}
 	if state.Advertise != "" {
 		fmt.Fprintf(stdout, "公网地址：%s\n", state.Advertise)
 	}
@@ -119,6 +130,10 @@ func printPublicAccessState(stdout io.Writer, asJSON bool, state agentsetup.Publ
 		return nil
 	}
 	fmt.Fprintf(stdout, "手机连接地址：%s\n", state.Endpoint)
+	if state.TLSTermination == config.PublicTLSTerminationTunnel {
+		fmt.Fprintln(stdout, "  证书由隧道提供商签发，手机按系统信任链校验，二维码不带证书指纹")
+		return nil
+	}
 	if state.Fingerprint == "" {
 		fmt.Fprintln(stdout, "  证书尚未生成：重启 agentd 或运行 agentd pair 后出现指纹")
 		return nil

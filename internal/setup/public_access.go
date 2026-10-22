@@ -31,6 +31,11 @@ func publicPairingEndpoint(cfg config.Config, lookups pairingNetworkLookups) (st
 	if net.ParseIP(host) == nil && !strings.Contains(host, ".") {
 		warnings = append(warnings, "公网配对地址不是 IP 也不是完整域名，手机可能无法解析")
 	}
+	if !cfg.PublicServesOwnTLS() {
+		// 隧道模式下证书由隧道提供商的 CA 签发，手机走系统信任链，
+		// 二维码里不带指纹；带指纹反而会把合法的边缘证书判成中间人。
+		warnings = append(warnings, "TLS 由隧道终结：证书由隧道提供商签发，手机按系统信任链校验，需把隧道域名回源到本机明文端口")
+	}
 	return httpsEndpoint(host, cfg.PublicAdvertisePort()), warnings, nil
 }
 
@@ -78,6 +83,11 @@ func PublicTLSMaterial(configPath string, cfg config.Config) (directtls.Material
 // publicTLSPin 是配对二维码里的信任依据。证书还没生成时（agentd 首次启动前）
 // 这里会顺手生成，保证 setup/pair 打印的二维码从一开始就带指纹。
 func publicTLSPin(configPath string, cfg config.Config, lookups pairingNetworkLookups) (string, error) {
+	if !cfg.PublicServesOwnTLS() {
+		// 隧道模式没有本机证书可指纹化：留空让手机退回系统信任链，
+		// 而不是拿一张根本没在公网上出示的自签证书指纹去 fail-closed。
+		return "", nil
+	}
 	material, err := publicTLSMaterial(configPath, cfg, lookups)
 	if err != nil {
 		return "", err
@@ -117,6 +127,8 @@ type PublicAccessState struct {
 	Advertise   string `json:"advertise"`
 	Endpoint    string `json:"endpoint,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// TLSTermination 回显 HTTPS 由谁终结，self_signed 或 tunnel。
+	TLSTermination string `json:"tls_termination,omitempty"`
 }
 
 // PublicAccessStatus 读取当前配置里的公网入口，不生成也不改动证书。
@@ -140,9 +152,10 @@ func PublicAccessRuntimeStatus(configPath string, cfg config.Config) PublicAcces
 
 func publicAccessState(configPath string, cfg config.Config, lookups pairingNetworkLookups) PublicAccessState {
 	state := PublicAccessState{
-		Enabled:   cfg.PublicAccessEnabled(),
-		Listen:    cfg.PublicListenAddress(),
-		Advertise: cfg.PublicAdvertiseHost(),
+		Enabled:        cfg.PublicAccessEnabled(),
+		Listen:         cfg.PublicListenAddress(),
+		Advertise:      cfg.PublicAdvertiseHost(),
+		TLSTermination: cfg.PublicTLSTermination(),
 	}
 	if !state.Enabled {
 		return state
@@ -152,6 +165,10 @@ func publicAccessState(configPath string, cfg config.Config, lookups pairingNetw
 		return state
 	}
 	state.Endpoint = endpoint
+	if !cfg.PublicServesOwnTLS() {
+		// 隧道模式没有本机指纹，状态到此为止就是完整的。
+		return state
+	}
 	// 状态查询不生成证书：agentd 还没起过时这里就是空指纹，二维码会在 pair 时按需生成。
 	certPath, keyPath, _ := cfg.PublicCertificatePaths(configPath)
 	if _, err := os.Stat(certPath); err != nil {
@@ -169,6 +186,7 @@ type PublicAccessConfigurationResult struct {
 	Enabled         bool               `json:"enabled"`
 	Listen          string             `json:"listen"`
 	Advertise       string             `json:"advertise"`
+	TLSTermination  string             `json:"tls_termination,omitempty"`
 	Endpoint        string             `json:"endpoint,omitempty"`
 	Fingerprint     string             `json:"fingerprint,omitempty"`
 	Changed         bool               `json:"changed"`
@@ -179,7 +197,9 @@ type PublicAccessConfigurationResult struct {
 
 // ConfigurePublicAccess 只改 network.public，保留 token、listen、配对和其它未知字段。
 // 关闭公网时仍记住 listen/advertise，用户下次打开不必重填。
-func ConfigurePublicAccess(path string, enabled bool, listen, advertise string) (PublicAccessConfigurationResult, error) {
+// tlsTermination 传 "" 表示沿用当前配置里的终结方式，避免只改 advertise 时把
+// tunnel 悄悄改回自签；显式写 self_signed 才是真的切回本机监听。
+func ConfigurePublicAccess(path string, enabled bool, listen, advertise, tlsTermination string) (PublicAccessConfigurationResult, error) {
 	doc, err := readModuleDocument(path, "network")
 	if err != nil {
 		return PublicAccessConfigurationResult{}, err
@@ -189,9 +209,10 @@ func ConfigurePublicAccess(path string, enabled bool, listen, advertise string) 
 	// 用它判断会让首次开启也带上 Previous，Restore 就退化成写 enabled=false。
 	neverConfigured := doc.cfg.Network.Public == nil
 	next := config.PublicAccessConfig{
-		Enabled:   &enabled,
-		Listen:    strings.TrimSpace(listen),
-		Advertise: strings.TrimSpace(advertise),
+		Enabled:        &enabled,
+		Listen:         strings.TrimSpace(listen),
+		Advertise:      strings.TrimSpace(advertise),
+		TLSTermination: strings.TrimSpace(tlsTermination),
 	}
 	// 关闭公网时也记住 listen/advertise：下次重新开启不必重填，
 	// 也避免「只是临时关掉」把用户配好的公网地址一起丢掉。
@@ -201,6 +222,9 @@ func ConfigurePublicAccess(path string, enabled bool, listen, advertise string) 
 	if next.Listen == "" {
 		next.Listen = before.Listen
 	}
+	if next.TLSTermination == "" {
+		next.TLSTermination = before.TLSTermination
+	}
 	payload := map[string]any{"enabled": enabled}
 	if next.Listen != "" {
 		payload["listen"] = next.Listen
@@ -208,8 +232,12 @@ func ConfigurePublicAccess(path string, enabled bool, listen, advertise string) 
 	if next.Advertise != "" {
 		payload["advertise"] = next.Advertise
 	}
+	if next.TLSTermination != "" && next.TLSTermination != config.PublicTLSTerminationSelfSigned {
+		payload["tls_termination"] = next.TLSTermination
+	}
 	after := publicAccessStateFrom(doc.cfg, next)
-	changed := before.Enabled != after.Enabled || before.Listen != after.Listen || before.Advertise != after.Advertise
+	changed := before.Enabled != after.Enabled || before.Listen != after.Listen ||
+		before.Advertise != after.Advertise || before.TLSTermination != after.TLSTermination
 	if changed {
 		if err := doc.commit("network", map[string]any{"public": payload}); err != nil {
 			return PublicAccessConfigurationResult{}, err
@@ -217,7 +245,8 @@ func ConfigurePublicAccess(path string, enabled bool, listen, advertise string) 
 	}
 	result := PublicAccessConfigurationResult{
 		Enabled: after.Enabled, Listen: after.Listen, Advertise: after.Advertise,
-		Endpoint: after.Endpoint, Fingerprint: after.Fingerprint,
+		TLSTermination: after.TLSTermination,
+		Endpoint:       after.Endpoint, Fingerprint: after.Fingerprint,
 		Changed: changed, RestartRequired: changed,
 		Applied: after,
 	}
@@ -249,7 +278,8 @@ func RestorePublicAccess(path string, previous PublicAccessConfigurationResult) 
 			Changed: current.Enabled, RestartRequired: current.Enabled, Applied: PublicAccessState{},
 		}, nil
 	}
-	return ConfigurePublicAccess(path, previous.Previous.Enabled, previous.Previous.Listen, previous.Previous.Advertise)
+	return ConfigurePublicAccess(path, previous.Previous.Enabled, previous.Previous.Listen,
+		previous.Previous.Advertise, previous.Previous.TLSTermination)
 }
 
 func publicAccessStateFrom(cfg config.Config, public config.PublicAccessConfig) PublicAccessState {
@@ -259,5 +289,6 @@ func publicAccessStateFrom(cfg config.Config, public config.PublicAccessConfig) 
 }
 
 func samePublicAccessState(left, right PublicAccessState) bool {
-	return left.Enabled == right.Enabled && left.Listen == right.Listen && left.Advertise == right.Advertise
+	return left.Enabled == right.Enabled && left.Listen == right.Listen &&
+		left.Advertise == right.Advertise && left.TLSTermination == right.TLSTermination
 }

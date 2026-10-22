@@ -138,7 +138,7 @@ func pairingEndpoint(
 
 	case PairingNetworkPublic:
 		if !cfg.PublicAccessEnabled() {
-			return "", nil, fmt.Errorf("公网直连尚未开启；请先执行 agentd public --enabled=true")
+			return "", nil, fmt.Errorf("公网直连尚未开启；请先执行 agentd public --enabled=true（隧道模式再加 --tls-termination=tunnel）")
 		}
 		return publicPairingEndpoint(cfg, lookups)
 	}

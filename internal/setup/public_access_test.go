@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"os"
@@ -40,7 +41,7 @@ func publicTestConfig(t *testing.T) string {
 
 func TestPublicAccessEnableKeepsOtherModulesAndRemembersAddress(t *testing.T) {
 	path := publicTestConfig(t)
-	result, err := ConfigurePublicAccess(path, true, "", "203.0.113.9")
+	result, err := ConfigurePublicAccess(path, true, "", "203.0.113.9", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +70,7 @@ func TestPublicAccessEnableKeepsOtherModulesAndRemembersAddress(t *testing.T) {
 	assertPublicUnknowns(t, path)
 
 	// 关闭时只改 enabled，公网地址仍留着供下次开启复用。
-	off, err := ConfigurePublicAccess(path, false, "", "")
+	off, err := ConfigurePublicAccess(path, false, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestPublicAccessEnableKeepsOtherModulesAndRemembersAddress(t *testing.T) {
 
 func TestPublicAccessRestoreNeverConfiguredRemovesSection(t *testing.T) {
 	path := publicTestConfig(t)
-	result, err := ConfigurePublicAccess(path, true, "0.0.0.0:9443", "203.0.113.9:9443")
+	result, err := ConfigurePublicAccess(path, true, "0.0.0.0:9443", "203.0.113.9:9443", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,11 +120,11 @@ func TestPublicAccessRestoreNeverConfiguredRemovesSection(t *testing.T) {
 
 func TestPublicAccessRestoreRejectsNewerIntent(t *testing.T) {
 	path := publicTestConfig(t)
-	result, err := ConfigurePublicAccess(path, true, "", "203.0.113.9")
+	result, err := ConfigurePublicAccess(path, true, "", "203.0.113.9", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ConfigurePublicAccess(path, true, "", "198.51.100.7"); err != nil {
+	if _, err := ConfigurePublicAccess(path, true, "", "198.51.100.7", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := RestorePublicAccess(path, result); err == nil {
@@ -191,7 +192,7 @@ func TestPublicPairingURLPinIsSignedAndFailClosed(t *testing.T) {
 
 func TestPublicTLSMaterialSANCoversAdvertiseAndStaysStable(t *testing.T) {
 	path := publicTestConfig(t)
-	if _, err := ConfigurePublicAccess(path, true, "", "203.0.113.9"); err != nil {
+	if _, err := ConfigurePublicAccess(path, true, "", "203.0.113.9", ""); err != nil {
 		t.Fatal(err)
 	}
 	cfg := moduleConfig(t, path)
@@ -231,7 +232,7 @@ func TestPublicTLSMaterialSANCoversAdvertiseAndStaysStable(t *testing.T) {
 	}
 
 	// 公网 IP 变了必须重签：旧指纹对新地址毫无意义。
-	if _, err := ConfigurePublicAccess(path, true, "", "198.51.100.7"); err != nil {
+	if _, err := ConfigurePublicAccess(path, true, "", "198.51.100.7", ""); err != nil {
 		t.Fatal(err)
 	}
 	changed, err := PublicTLSMaterial(path, moduleConfig(t, path))
@@ -289,3 +290,125 @@ func assertPublicUnknowns(t *testing.T, path string) {
 }
 
 func boolPointer(value bool) *bool { return &value }
+
+// TestPublicAccessTunnelTerminationSkipsOwnListenerAndPin 覆盖隧道模式：
+// 本机不建公网 TLS 监听、配对地址是隧道域名的 443、二维码不带证书指纹。
+// 手机侧因此走系统信任链，隧道提供商的正式证书不会被当成中间人拒掉。
+func TestPublicAccessTunnelTerminationSkipsOwnListenerAndPin(t *testing.T) {
+	path := publicTestConfig(t)
+	result, err := ConfigurePublicAccess(path, true, "", "mimi.example.net", config.PublicTLSTerminationTunnel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TLSTermination != config.PublicTLSTerminationTunnel {
+		t.Fatalf("应回显隧道终结方式：%+v", result)
+	}
+	if result.Endpoint != "https://mimi.example.net:443" {
+		t.Fatalf("隧道模式下手机应连隧道域名的 443：%s", result.Endpoint)
+	}
+	if result.Fingerprint != "" {
+		t.Fatalf("隧道模式没有本机证书，不该给出指纹：%s", result.Fingerprint)
+	}
+	cfg := moduleConfig(t, path)
+	if cfg.PublicTLSTermination() != config.PublicTLSTerminationTunnel || cfg.PublicServesOwnTLS() {
+		t.Fatal("隧道模式不应让 agentd 自己终结 TLS")
+	}
+	if got := cfg.PublicListenAddress(); got != "" {
+		t.Fatalf("隧道模式本机不该建公网 TLS 监听：%q", got)
+	}
+	if got := cfg.PublicAdvertisePort(); got != "443" {
+		t.Fatalf("隧道模式默认公布 443：%s", got)
+	}
+	if got := publicRawSection(t, path)["tls_termination"]; got != "tunnel" {
+		t.Fatalf("终结方式必须落进配置：%v", got)
+	}
+	certPath, _, _ := cfg.PublicCertificatePaths(path)
+	if _, err := os.Stat(certPath); !os.IsNotExist(err) {
+		t.Fatal("隧道模式不应生成自签证书")
+	}
+
+	// 二维码是手机唯一的带外信道：这里没有指纹就绝不能凭空塞一个进去。
+	lookups := pairingNetworkLookups{publicIP: func() string { return "198.51.100.7" }}
+	pairing, err := resultFromConfigForNetwork(context.Background(), path, cfg, PairingNetworkPublic, lookups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pairing.TLSPin != "" {
+		t.Fatalf("隧道配对的指纹必须为空：%s", pairing.TLSPin)
+	}
+	if pairing.Endpoint != "https://mimi.example.net:443" {
+		t.Fatalf("隧道配对地址异常：%s", pairing.Endpoint)
+	}
+	if strings.Contains(pairing.PairURL, "tls_pin=") || strings.Contains(pairing.ConnectURL, "tls_pin=") {
+		t.Fatalf("隧道配对 URL 不能带 tls_pin：%s", pairing.PairURL)
+	}
+
+	// 切回自签必须恢复本机监听与指纹链路，用户换回直连不必重新理解配置。
+	back, err := ConfigurePublicAccess(path, true, "", "mimi.example.net", config.PublicTLSTerminationSelfSigned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.TLSTermination != config.PublicTLSTerminationSelfSigned {
+		t.Fatalf("切回自签失败：%+v", back)
+	}
+	if got := moduleConfig(t, path).PublicListenAddress(); got != "0.0.0.0:8443" {
+		t.Fatalf("切回自签后应恢复默认公网监听：%q", got)
+	}
+}
+
+// TestPublicAccessTunnelTerminationSurvivesUnrelatedEdit 确认只改 advertise 时
+// 不会把 tunnel 悄悄改回自签：终结方式属于同一份意图，必须被记住。
+func TestPublicAccessTunnelTerminationSurvivesUnrelatedEdit(t *testing.T) {
+	path := publicTestConfig(t)
+	first, err := ConfigurePublicAccess(path, true, "", "mimi.example.net", config.PublicTLSTerminationTunnel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.TLSTermination != config.PublicTLSTerminationTunnel {
+		t.Fatalf("首次开启应写入隧道终结：%+v", first)
+	}
+	edited, err := ConfigurePublicAccess(path, true, "", "tunnel.example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.TLSTermination != config.PublicTLSTerminationTunnel {
+		t.Fatalf("只改地址不应改变终结方式：%+v", edited)
+	}
+	if edited.Advertise != "tunnel.example.com" || edited.Endpoint != "https://tunnel.example.com:443" {
+		t.Fatalf("地址未生效：%+v", edited)
+	}
+	// 还原用的是编辑那次的事务回执：它的 Previous 正是第一次的意图。
+	restored, err := RestorePublicAccess(path, edited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.TLSTermination != config.PublicTLSTerminationTunnel || restored.Advertise != "mimi.example.net" {
+		t.Fatalf("还原应同时带回地址与终结方式：%+v", restored)
+	}
+	if got := moduleConfig(t, path).PublicListenAddress(); got != "" {
+		t.Fatalf("还原后仍应保持隧道模式：本机监听 %q", got)
+	}
+}
+
+// publicRawSection 直接读原始 JSON 里的 network.public，用来断言「配置里到底写了什么」，
+// 而不是经过缺省值补齐后的视图。
+func publicRawSection(t *testing.T, path string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err = json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	network, ok := document["network"].(map[string]any)
+	if !ok {
+		t.Fatalf("network 段丢失：%s", raw)
+	}
+	public, ok := network["public"].(map[string]any)
+	if !ok {
+		t.Fatalf("network.public 段丢失：%s", raw)
+	}
+	return public
+}
