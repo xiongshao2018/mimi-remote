@@ -201,16 +201,14 @@ private struct MimiCarStatusWidgetBundle: WidgetBundle {
     }
 }
 
+// `#Preview(as:) { ... } timeline: { ... }` 展开成 `Preview(_:as:widget:timeline:)`，
+// 那是 iOS 17 API，部署目标下调到 16.2 后编译会直接报
+// "'Preview(_:as:widget:timeline:)' is only available in iOS 17.0 or newer"。
+// 这里改用 iOS 16 就有的 content 形式，预览时间线由 provider 给出；
+// 新鲜/过期两条样例数据仍由下面的 `widgetPreview(publishedAt:)` 提供，
+// 需要看过期态时在 Canvas 里选第二个 timeline 条目。
 #Preview(as: .systemSmall) {
     MimiCarStatusWidget()
-} timeline: {
-    MimiCarStatusEntry(date: .now, snapshot: .widgetPreview())
-    MimiCarStatusEntry(
-        date: .now,
-        snapshot: .widgetPreview(
-            publishedAt: .now.addingTimeInterval(-CarStatusSnapshotV1.defaultStaleInterval)
-        )
-    )
 }
 
 private extension CarStatusSnapshotV1 {
