@@ -144,6 +144,28 @@ entitlements_for_bundle() {
 # Frameworks/ 里的 Mach-O 单独签：工具链会在这里放 Swift 回部署库
 # （例如 libswift_Concurrency.dylib），未签名的 dylib 会让 dyld 在启动时报
 # "code signature invalid"。这类库不需要 entitlement，用 ldid -S 直接签。
+# 本机 ldid 的 -h 会输出整段 codesign 风格信息，CDHash 单独占一行；取出来才是可核对的哈希。
+read_cdhash() {
+  ldid -h "$1" 2>/dev/null | sed -n 's/^CDHash=//p' | head -n 1
+}
+
+# 回读 Mach-O 里的 entitlements，与过滤后的预期逐项比对。ldid 写失败或键被吞掉时不会报错，
+# 只有装到手机上启动才暴露，所以在这里就地拦住。
+verify_entitlements() {
+  python3 - "$1" "$2" <<'PY'
+import plistlib
+import subprocess
+import sys
+
+printed = subprocess.run(["ldid", "-e", sys.argv[1]], capture_output=True, text=True).stdout
+actual = plistlib.loads(printed.encode()) if printed.strip() else {}
+with open(sys.argv[2], "rb") as handle:
+    expected = plistlib.load(handle)
+if actual != expected:
+    sys.exit("期望 " + ",".join(sorted(expected)) + " 实际 " + ",".join(sorted(actual)))
+PY
+}
+
 sign_nested_macho() {
   local target="$1"
   local executable=""
@@ -167,7 +189,7 @@ sign_nested_macho() {
   rm -rf "$target/_CodeSignature"
   ldid -S "$executable" || fail "ldid 签名失败：$executable"
   local cdhash
-  cdhash="$(ldid -h "$executable")" || fail "签名校验失败：$executable"
+  cdhash="$(read_cdhash "$executable")"
   [[ -n "$cdhash" ]] || fail "签名后读不到 CDHash：$executable"
   printf '  已签名 %-46s CDHash=%s\n' "$(basename "$target")" "${cdhash:0:16}"
 }
@@ -206,8 +228,10 @@ sign_bundle() {
   # 旧签名目录会和 ldid 写在 Mach-O 内的签名并存，TrollStore 会读到过期校验信息。
   rm -rf "$bundle/_CodeSignature"
   ldid -S"$filtered" "$bundle/$executable" || fail "ldid 签名失败：$bundle/$executable"
+  verify_entitlements "$bundle/$executable" "$filtered" \
+    || fail "签名后 entitlements 校验失败：$bundle/$executable"
   local cdhash
-  cdhash="$(ldid -h "$bundle/$executable")" || fail "签名校验失败：$bundle/$executable"
+  cdhash="$(read_cdhash "$bundle/$executable")"
   [[ -n "$cdhash" ]] || fail "签名后读不到 CDHash：$bundle/$executable"
   printf '  已签名 %-46s CDHash=%s\n' "$bundle_id" "${cdhash:0:16}"
 }
