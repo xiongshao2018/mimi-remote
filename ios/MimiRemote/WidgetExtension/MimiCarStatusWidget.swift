@@ -201,15 +201,25 @@ private struct MimiCarStatusWidgetBundle: WidgetBundle {
     }
 }
 
-// `#Preview(as:) { ... } timeline: { ... }` 展开成 `Preview(_:as:widget:timeline:)`，
-// 那是 iOS 17 API，部署目标下调到 16.2 后编译会直接报
-// "'Preview(_:as:widget:timeline:)' is only available in iOS 17.0 or newer"。
-// 这里改用 iOS 16 就有的 content 形式，预览时间线由 provider 给出；
-// 新鲜/过期两条样例数据仍由下面的 `widgetPreview(publishedAt:)` 提供，
-// 需要看过期态时在 Canvas 里选第二个 timeline 条目。
+// Widget 预览只有 `Preview(_:as:widget:timeline:)` 这一个宏：Xcode 26.5 SDK 实测写成
+// `#Preview(as:) { ... }` 会报 “missing argument for parameter 'timeline'”，
+// 补上 timeline 又报 “'Preview(_:as:widget:timeline:)' is only available in iOS 17.0 or newer”，
+// 也就是部署目标 16.2 下这两种写法都编不过。预览只在 Xcode Canvas 里用，不进产物，
+// 因此 iOS 16 构建（TrollStore 工作流注入 MIMI_LEGACY_IOS）整段跳过，
+// iOS 17+ 的日常开发仍保留新鲜/过期两条样例时间线（样例数据见下面的 `widgetPreview(publishedAt:)`）。
+#if !MIMI_LEGACY_IOS
 #Preview(as: .systemSmall) {
     MimiCarStatusWidget()
+} timeline: {
+    MimiCarStatusEntry(date: .now, snapshot: .widgetPreview())
+    MimiCarStatusEntry(
+        date: .now,
+        snapshot: .widgetPreview(
+            publishedAt: .now.addingTimeInterval(-CarStatusSnapshotV1.defaultStaleInterval)
+        )
+    )
 }
+#endif
 
 private extension CarStatusSnapshotV1 {
     static func widgetPreview(publishedAt: Date = .now) -> CarStatusSnapshotV1 {

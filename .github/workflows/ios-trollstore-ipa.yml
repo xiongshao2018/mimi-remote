@@ -65,6 +65,9 @@ jobs:
           # 所以这里显式关掉签名与描述文件解析，避免 CI 需要 Apple 账号。
           configuration="${{ inputs.configuration }}"
           [[ -n "$configuration" ]] || configuration=Debug
+          # MIMI_LEGACY_IOS：把只在 iOS 17+ 可用的 #Preview 预览宏整段排除编译。
+          # Widget 预览宏（Preview(_:as:widget:timeline:)）在 16.2 目标下必然报错，
+          # 预览只服务 Xcode Canvas，不影响产物。$(inherited) 保住工程自带的 DEBUG。
           xcodebuild \
             -project ios/MimiRemote/MimiRemote.xcodeproj \
             -scheme MimiRemote \
@@ -77,6 +80,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
             PROVISIONING_PROFILE_SPECIFIER= \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) MIMI_LEGACY_IOS' \
             build
 
       - name: Verify product and minimum OS requirement

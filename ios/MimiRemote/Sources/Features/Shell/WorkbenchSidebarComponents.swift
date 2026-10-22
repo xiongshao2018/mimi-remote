@@ -752,7 +752,8 @@ struct CodexUsageRingMetrics {
     }
 }
 
-#if DEBUG
+// `#Preview` 宏本身按 iOS 17 收口，部署目标 16.2 下不参与编译（TrollStore 工作流注入 MIMI_LEGACY_IOS）。
+#if DEBUG && !MIMI_LEGACY_IOS
 #Preview(L10n.text("ui.token_quota")) {
     let codex = CodexUsageWindowsDisplay.make(
         rateLimit: RateLimitSummary(
