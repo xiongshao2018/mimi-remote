@@ -38,13 +38,14 @@ enum CompatScrollBounceBehavior {
     }
 }
 
-/// `ScrollAnchorBehavior` 是 iOS 18，同理收口。
+/// `ScrollAnchorRole` 是 iOS 18（Apple Docs 实测 `struct ScrollAnchorRole`，iOS 18.0；
+/// 系统里并不存在 `ScrollAnchorBehavior` 这个名字），同理收口。
 enum CompatScrollAnchorBehavior {
     case initialOffset
     case alignment
 
     @available(iOS 18.0, *)
-    var native: ScrollAnchorBehavior {
+    var native: ScrollAnchorRole {
         switch self {
         case .initialOffset: return .initialOffset
         case .alignment: return .alignment
@@ -382,17 +383,19 @@ extension View {
 
 /// `ContentMarginPlacement` 本身是 iOS 17，不能直接出现在 16.2 的参数位置。
 /// case 名与系统一致，调用点只换修饰符名。
+/// Apple Docs 实测该类型的全部属性只有 `automatic` / `scrollContent` / `scrollIndicators`
+/// 三个（`contentLayout`、`content` 都不存在），因此默认档用系统的 `.automatic`。
 enum CompatContentMarginPlacement: Equatable {
+    case automatic
     case scrollContent
     case scrollIndicators
-    case contentLayout
 
     @available(iOS 17.0, *)
     var native: ContentMarginPlacement {
         switch self {
+        case .automatic: return .automatic
         case .scrollContent: return .scrollContent
         case .scrollIndicators: return .scrollIndicators
-        case .contentLayout: return .contentLayout
         }
     }
 }
@@ -429,7 +432,7 @@ extension View {
     func compatContentMargins(
         _ edges: Edge.Set = .all,
         _ length: CGFloat,
-        for placement: CompatContentMarginPlacement = .contentLayout
+        for placement: CompatContentMarginPlacement = .automatic
     ) -> some View {
         if #available(iOS 17.0, *) {
             self.contentMargins(edges, length, for: placement.native)
@@ -525,9 +528,12 @@ extension Animation {
 // MARK: - toolbarBackgroundVisibility（iOS 18）
 
 extension View {
-    /// `toolbarBackgroundVisibility(_:for:)` 是 iOS 18。
-    /// iOS 16.2 用同期的 `toolbarBackground(_:for:)` Visibility 重载表达同一意图，
-    /// 语义一致（控制 bar 底板显隐），只是 iOS 27 起那个写法被标记废弃。
+    /// `toolbarBackgroundVisibility(_:for:)` 是 iOS 18（Apple Docs 实测）。
+    /// 低版本退化为 no-op：Apple Docs 里 `toolbarBackground(_:for:)` 只给了 ShapeStyle
+    /// 重载（iOS 16），Visibility 重载没有文档页、无法确认引入版本，
+    /// 在 16.2 的上下文里直接调用有编译不过的风险。
+    /// 调用点在同一条链上已经用 ShapeStyle 重载显式设过底板颜色，
+    /// 因此 16.x 少掉这个修饰符只影响显隐语义，不影响可见结果。
     @ViewBuilder
     func compatToolbarBackgroundVisibility(
         _ visibility: Visibility,
@@ -536,7 +542,7 @@ extension View {
         if #available(iOS 18.0, *) {
             self.toolbarBackgroundVisibility(visibility, for: bars)
         } else {
-            self.toolbarBackground(visibility, for: bars)
+            self
         }
     }
 }
