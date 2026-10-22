@@ -4,6 +4,11 @@ name: iOS TrollStore IPA
 # 打包成 IPA 后由本机 scripts/ios-trollstore-package.sh 用 ldid 注入 entitlement
 # 并伪签名，最后交给 TrollStore 安装。这里不申请描述文件，也不做 App Store 签名。
 on:
+  push:
+    # 无 API Token 的开发机用 tag 触发同一份工作流；产物由末尾 Publish 步骤发到公开 Release，
+    # 本机可以直接 curl 下载，不需要登录态。
+    tags:
+      - "trollstore-*"
   workflow_dispatch:
     inputs:
       configuration:
@@ -21,7 +26,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ios-trollstore-ipa-${{ github.ref }}
@@ -58,10 +63,12 @@ jobs:
           set -euo pipefail
           # 真机产物只要求能编译并链接进静态 Tailcat 框架；签名交给本机的 ldid，
           # 所以这里显式关掉签名与描述文件解析，避免 CI 需要 Apple 账号。
+          configuration="${{ inputs.configuration }}"
+          [[ -n "$configuration" ]] || configuration=Debug
           xcodebuild \
             -project ios/MimiRemote/MimiRemote.xcodeproj \
             -scheme MimiRemote \
-            -configuration "${{ inputs.configuration }}" \
+            -configuration "$configuration" \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/trollstore-derived" \
@@ -78,6 +85,8 @@ jobs:
           TARGET_IOS_VERSION: ${{ inputs.target_ios_version }}
         run: |
           set -euo pipefail
+          # tag 触发没有 inputs：按本分支的目标机型兜底，避免版本核对被空值绕过。
+          [[ -n "${TARGET_IOS_VERSION:-}" ]] || TARGET_IOS_VERSION=16.2
           app="$RUNNER_TEMP/trollstore-derived/Build/Products/iphoneos/MimiRemote.app"
           [[ -d "$app" ]] || { echo "找不到真机产物：$app" >&2; exit 1; }
 
@@ -150,3 +159,22 @@ jobs:
           path: ${{ runner.temp }}/MimiRemote-trollstore-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish IPA on Release
+        # Actions artifact 需要登录态才能下载；公开 Release 的 asset 可以直接 curl，
+        # 所以 tag 触发时额外把同一个 IPA 挂到 Release 上供本机取。
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IPA_PATH: ${{ runner.temp }}/MimiRemote-trollstore-unsigned.ipa
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG_NAME" --yes >/dev/null 2>&1 || true
+          gh release create "$TAG_NAME" "$IPA_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "TrollStore unsigned IPA $TAG_NAME" \
+            --notes "未签名真机产物，需在本机执行 scripts/ios-trollstore-package.sh 用 ldid 注入 entitlement 后再装。"
+          asset="$(gh release view "$TAG_NAME" --json assets --jq '.assets[0].url')"
+          echo "release asset: $asset" >> "$GITHUB_STEP_SUMMARY"
