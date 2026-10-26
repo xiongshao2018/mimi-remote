@@ -179,6 +179,7 @@ struct InitialConnectionSettingsSections: View {
     @EnvironmentObject private var sessionStore: SessionStore
     @EnvironmentObject private var themeStore: ThemeStore
     @EnvironmentObject private var tailcatController: TailcatExperimentController
+    @Environment(\.hostMetricsStore) private var hostMetricsStore
     /// 只在托管入口可见时读取；快照测试不注入它，入口也不会显示。
     @EnvironmentObject private var managedConnectionEntitlementStore: ManagedConnectionEntitlementStore
     @AppStorage("managedConnection.lanHintDismissedAt") private var managedLANHintDismissedAt: Double = 0
@@ -296,6 +297,10 @@ struct InitialConnectionSettingsSections: View {
         .alignmentGuide(.listRowSeparatorLeading) { _ in SettingsLayoutMetrics.iconSlot + SettingsLayoutMetrics.iconSpacing }
         // 连接地址/Token 是高频编辑状态，放在这个小子树里，避免每次删字都重绘整个设置页。
         .onAppear(perform: loadInitialConnectionIfNeeded)
+        .onAppear {
+            // 设备页是硬件画像的拉取入口：连接指纹变化时重新拉一次。
+            hostMetricsStore?.bindConnection(fingerprint: appStore.authenticatedCredentialFingerprint)
+        }
         // 横幅的「重新配对」先打开这一页，再在这里消费一次性请求。
         // task 不保证外层 sheet 已完成转场；扫码呈现必须经过实际交互验收。
         .task(id: draft.pendingRepairRequest) {
@@ -408,6 +413,16 @@ struct InitialConnectionSettingsSections: View {
     ) -> some View {
         connectionPresentationSection {
             currentComputerRow(item)
+
+            // 硬件摘要（内存/硬盘/显卡）只在当前电脑上展示；旧 agentd 没有
+            // /api/host/hardware 时 summaryLine 为 nil，整行不渲染。
+            if let summary = hostMetricsStore?.hardware?.summaryLine {
+                Text(summary)
+                    .font(themeStore.uiFont(.footnote))
+                    .foregroundStyle(tokens.secondaryText)
+                    .settingsRow(.descriptive)
+                    .accessibilityIdentifier("settings.profile.hardwareSummary")
+            }
 
             if copiedConnectionProfileID == item.id {
                 // 访问码提醒只在真正复制的那一刻出现，不再常驻设备首页。

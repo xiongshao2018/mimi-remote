@@ -494,6 +494,28 @@ struct AgentAPIClient {
         return response
     }
 
+    /// 电脑静态硬件画像（显卡/内存/硬盘）。旧 agentd 没有该端点时返回 404，
+    /// 调用方按「不支持」整块隐藏，不弹错误。
+    func hostHardware(timeout: TimeInterval = 20) async throws -> HostHardwareResponse {
+        try await request(
+            path: "/api/host/hardware",
+            method: "GET",
+            body: Optional<Data>.none,
+            timeout: timeout
+        )
+    }
+
+    /// 电脑实时资源快照（CPU/内存/磁盘用量、网络速率）。服务端按相邻两次
+    /// 采样求差值，调用方按固定间隔轮询即可。
+    func hostMetrics(timeout: TimeInterval = 20) async throws -> HostMetricsResponse {
+        try await request(
+            path: "/api/host/metrics",
+            method: "GET",
+            body: Optional<Data>.none,
+            timeout: timeout
+        )
+    }
+
     func appServerConfig(timeout: TimeInterval = 20) async throws -> CodexAppServerConfigResponse {
         try await request(
             path: "/api/app-server/config",

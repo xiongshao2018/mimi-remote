@@ -26,6 +26,7 @@ struct ComposerView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.accessibilityReduceTransparency) var reduceTransparency
     @Environment(\.composerLayoutHandoff) var composerLayoutHandoff
+    @Environment(\.hostMetricsStore) var hostMetricsStore
     @State var composerState = ComposerState()
     @State var activeComposerDraftScope = ComposerDraftScopeKey.none
     @State var composerTextExternalRevision = 0
@@ -169,11 +170,13 @@ struct ComposerView: View {
             synchronizePendingUserInputPresentation(previous: nil, current: pendingUserInputSelectionIdentity)
             clampModelSelectionToSelectedSessionRuntime()
             attachLayoutHandoff()
+            hostMetricsStore?.startMetricsPolling()
         }
         .task {
             await prepareComposer()
         }
         .onDisappear {
+            hostMetricsStore?.stopMetricsPolling()
             sessionStore.invalidateNativePromptSuggestion()
             if sessionStore.activeComposerInstanceID == composerInstanceID {
                 sessionStore.activeComposerInstanceID = nil
@@ -215,6 +218,7 @@ struct ComposerView: View {
             FileUploadJobsStrip(store: sessionStore.fileUploadStore, scope: activeComposerDraftScope)
                 .environmentObject(themeStore)
             attachmentStrip
+            ComposerHostMetricsStrip()
             composerStatusRow
             nativePromptSuggestionNotice
             composerInputRow(tokens: tokens)
