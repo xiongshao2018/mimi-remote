@@ -303,6 +303,17 @@ extension CompatContentUnavailableView where Actions == EmptyView, Label == AnyV
     }
 }
 
+extension CompatContentUnavailableView where Actions == EmptyView {
+    /// 两段 builder 形态：镜像原生 `ContentUnavailableView { } description: { }`（iOS 17），
+    /// 调用点不写 `actions:` 时 `Actions` 无法从参数推断，必须收口进这个便利 init。
+    init(
+        @ViewBuilder label: () -> Label,
+        @ViewBuilder description: () -> Description
+    ) {
+        self.init(label: label, description: description, actions: { EmptyView() })
+    }
+}
+
 extension CompatContentUnavailableView {
     var body: some View {
         VStack(spacing: 12) {
