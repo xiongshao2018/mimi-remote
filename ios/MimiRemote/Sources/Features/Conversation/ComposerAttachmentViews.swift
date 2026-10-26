@@ -548,15 +548,20 @@ struct AddContentPanel: View {
         .compatPresentationBackgroundStyle {
             if reduceTransparency {
                 AnyShapeStyle(tokens.surface)
-            } else if #available(iOS 17.0, *) {
-                // View 当 ShapeStyle 用是 iOS 17；16.2 只能用主题实色底板。
-                AnyShapeStyle(
-                    Rectangle()
-                        .fill(WorkbenchMaterial.surface)
-                        .overlay(tokens.surface.opacity(colorScheme == .light ? 0.28 : 0.20))
-                )
             } else {
-                AnyShapeStyle(tokens.surface)
+                // View 当 ShapeStyle 用是 iOS 17 的条件一致性，deployment 16.2 下
+                // #available 救不了类型检查（run 39796966551 的 ShapeStyle 报错），
+                // 所以 16.2 构建（注入 MIMI_LEGACY_IOS）整段不参与编译，退主题实色底板。
+                #if !MIMI_LEGACY_IOS
+                if #available(iOS 17.0, *) {
+                    return AnyShapeStyle(
+                        Rectangle()
+                            .fill(WorkbenchMaterial.surface)
+                            .overlay(tokens.surface.opacity(colorScheme == .light ? 0.28 : 0.20))
+                    )
+                }
+                #endif
+                return AnyShapeStyle(tokens.surface)
             }
         }
         .modifier(
