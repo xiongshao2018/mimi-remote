@@ -143,16 +143,6 @@ extension View {
             self
         }
     }
-
-    /// `containerBackgroundRemovable` 是 iOS 17；低版本保持系统默认。
-    @ViewBuilder
-    func compatContainerBackgroundRemovable(_ removable: Bool) -> some View {
-        if #available(iOS 17.0, *) {
-            self.containerBackgroundRemovable(removable)
-        } else {
-            self
-        }
-    }
 }
 
 // MARK: - 键盘方向键（onKeyPress / KeyEquivalent 是 iOS 17）
@@ -201,7 +191,10 @@ extension View {
 
 // MARK: - onGeometryChange（iOS 18）：低版本用背景 GeometryReader + PreferenceKey 复刻
 
-private struct CompatGeometryBox<V> {
+/// 16.2 目标上只有旧重载 `onPreferenceChange(_:perform:)` 可用，它要求
+/// `P.Value: Equatable`；iOS 17+ 编译时编译器优先选新重载，补这个一致性
+/// 不改变 iOS 18 构建的行为。
+private struct CompatGeometryBox<V: Equatable>: Equatable {
     let value: V
 }
 
@@ -281,7 +274,9 @@ struct CompatContentUnavailableView<Label: View, Description: View, Actions: Vie
                         Text(title)
                     }
                 } else {
-                    Label(title, systemImage: icon)
+                    // 26.5 SDK 已移除 `Label(_:systemImage:)` 两参构造（只剩带 description:
+                    // 的重载与 title:icon: 闭包形态）；后者 iOS 13+ 可用，无需门控。
+                    Label(title: { Text(title) }, icon: { Image(systemName: icon) })
                 }
             }
         )
@@ -637,7 +632,24 @@ extension View {
         for bars: ToolbarPlacement...
     ) -> some View {
         if #available(iOS 18.0, *) {
-            self.toolbarBackgroundVisibility(visibility, for: bars)
+            // Swift 不能把 [ToolbarPlacement] splat 进 variadic 参数（run 13 实测
+            // 「cannot pass array of type 'ToolbarPlacement...' as variadic」）。
+            // 按数量展开常见 arity；多 bar 逐个应用兜底——该修饰符按 bar 独立生效，
+            // 逐个调用与一次多 bar 调用语义等价（现有调用点均为单 bar）。
+            switch bars.count {
+            case 0:
+                self
+            case 1:
+                self.toolbarBackgroundVisibility(visibility, for: bars[0])
+            case 2:
+                self.toolbarBackgroundVisibility(visibility, for: bars[0], bars[1])
+            default:
+                AnyView(bars.dropFirst(2).reduce(
+                    AnyView(self.toolbarBackgroundVisibility(visibility, for: bars[0], bars[1]))
+                ) { view, bar in
+                    AnyView(view.toolbarBackgroundVisibility(visibility, for: bar))
+                })
+            }
         } else {
             self
         }

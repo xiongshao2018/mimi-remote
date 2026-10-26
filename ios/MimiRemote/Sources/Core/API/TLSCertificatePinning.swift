@@ -213,11 +213,18 @@ final class TLSCertificatePinDelegate: NSObject, URLSessionDelegate, URLSessionT
             completion(false)
             return
         }
-        let status = SecTrustEvaluateAsyncAtTimestamp(evaluatedTrust, CFDate(Date())) { _, result in
-            completion(result == kSecTrustResultUnspecified || result == kSecTrustResultProceed)
-        }
-        if status != errSecSuccess {
-            completion(false)
+        // 26.5 SDK 已移除 SecTrustEvaluateAsyncAtTimestamp，kSecTrustResult* 是 CF_ENUM、
+        // Swift 里不导出全局常量。改用 iOS 13+ 的 SecTrustEvaluateAsyncWithError：
+        // 其 Bool 语义就是「评估通过（unspecified/proceed）」，与原判定等价。
+        // 头文件要求「MUST be called from that queue」，故整体切到 .main 再调用；
+        // 评估本就异步，completionHandler 允许任意线程回调，行为不变。
+        DispatchQueue.main.async {
+            let status = SecTrustEvaluateAsyncWithError(evaluatedTrust, .main) { _, trusted, _ in
+                completion(trusted)
+            }
+            if status != errSecSuccess {
+                completion(false)
+            }
         }
     }
 }

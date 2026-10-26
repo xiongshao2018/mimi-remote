@@ -1716,7 +1716,6 @@ final class AppStore: ObservableObject {
                     tailscaleDeviceName: refreshedDeviceName,
                     hostDeviceName: refreshedHostDeviceName,
                     hostPlatform: HostPlatform(serverValue: version.platform),
-                    tlsCertPin: tlsCertPin,
                     hostContext: PreparedHostContext(
                         lease: PreparedHostLease(
                             endpoint: activeEndpoint,
@@ -1728,7 +1727,8 @@ final class AppStore: ObservableObject {
                         runtimeBundle: bundle,
                         expiresAt: deadline
                     ),
-                    capabilityNegotiation: version.capabilityNegotiation
+                    capabilityNegotiation: version.capabilityNegotiation,
+                    tlsCertPin: tlsCertPin
                 )
             } catch {
                 // 每次失败都先完整退役 candidate；重试时始终只有一条候选业务 WS。

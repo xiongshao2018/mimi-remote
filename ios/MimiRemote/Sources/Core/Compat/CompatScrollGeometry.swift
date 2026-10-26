@@ -170,8 +170,9 @@ private final class CompatScrollObservationView: UIView {
         var queue = root.subviews.filter { $0 !== observer && !$0.isHidden }
         while !queue.isEmpty {
             let view = queue.removeFirst()
-            if view is UIScrollView {
-                return view
+            // -swift-version 5 下 `is` 收窄不会自动把 UIView 转成 UIScrollView，显式 as?。
+            if let scrollView = view as? UIScrollView {
+                return scrollView
             }
             queue.append(contentsOf: view.subviews.filter { !$0.isHidden })
         }
