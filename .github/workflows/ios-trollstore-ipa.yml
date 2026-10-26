@@ -65,6 +65,9 @@ jobs:
           # 所以这里显式关掉签名与描述文件解析，避免 CI 需要 Apple 账号。
           configuration="${{ inputs.configuration }}"
           [[ -n "$configuration" ]] || configuration=Debug
+          # 导出给后续步骤：xcodebuild 产物目录是 Build/Products/<Configuration>-iphoneos，
+          # Verify 与 Package 必须按同一 configuration 定位 .app。
+          echo "configuration=$configuration" >> "$GITHUB_ENV"
           # MIMI_LEGACY_IOS：把只在 iOS 17+ 可用的 #Preview 预览宏整段排除编译。
           # Widget 预览宏（Preview(_:as:widget:timeline:)）在 16.2 目标下必然报错，
           # 预览只服务 Xcode Canvas，不影响产物。$(inherited) 保住工程自带的 DEBUG。
@@ -91,7 +94,8 @@ jobs:
           set -euo pipefail
           # tag 触发没有 inputs：按本分支的目标机型兜底，避免版本核对被空值绕过。
           [[ -n "${TARGET_IOS_VERSION:-}" ]] || TARGET_IOS_VERSION=16.2
-          app="$RUNNER_TEMP/trollstore-derived/Build/Products/iphoneos/MimiRemote.app"
+          # xcodebuild 产物目录按 <Configuration>-<平台> 命名，不是裸 iphoneos。
+          app="$RUNNER_TEMP/trollstore-derived/Build/Products/${configuration}-iphoneos/MimiRemote.app"
           [[ -d "$app" ]] || { echo "找不到真机产物：$app" >&2; exit 1; }
 
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
@@ -143,7 +147,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app="$RUNNER_TEMP/trollstore-derived/Build/Products/iphoneos/MimiRemote.app"
+          app="$RUNNER_TEMP/trollstore-derived/Build/Products/${configuration}-iphoneos/MimiRemote.app"
           payload_dir="$RUNNER_TEMP/trollstore-payload"
           rm -rf "$payload_dir"
           mkdir -p "$payload_dir/Payload"
