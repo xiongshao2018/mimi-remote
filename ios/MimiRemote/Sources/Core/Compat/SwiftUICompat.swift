@@ -274,9 +274,12 @@ struct CompatContentUnavailableView<Label: View, Description: View, Actions: Vie
                         Text(title)
                     }
                 } else {
-                    // 26.5 SDK 已移除 `Label(_:systemImage:)` 两参构造（只剩带 description:
-                    // 的重载与 title:icon: 闭包形态）；后者 iOS 13+ 可用，无需门控。
-                    Label(title: { Text(title) }, icon: { Image(systemName: icon) })
+                    // 本 struct 的泛型参数 `Label`（`where Label == AnyView`）遮蔽了
+                    // `SwiftUI.Label`：裸写 `Label(...)` 会被解析成 `AnyView(...)`，
+                    // run 13 的 "extra argument 'systemImage'" 与 run 15 的
+                    // "generic parameter 'R' could not be inferred" 都是这个根因。
+                    // 用 `SwiftUI.` 限定；(_:systemImage:) 是 iOS 14+，无需门控。
+                    SwiftUI.Label(title, systemImage: icon)
                 }
             }
         )
