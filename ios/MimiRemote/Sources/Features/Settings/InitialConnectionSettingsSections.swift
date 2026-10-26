@@ -726,11 +726,13 @@ struct InitialConnectionSettingsSections: View {
         stateTint: Color
     ) -> some View {
         let tokens = themeStore.tokens(for: colorScheme)
-        let stateText = Text(state).foregroundStyle(stateTint)
+        // foregroundStyle 返回 Text 的重载是 iOS 17+；16.2 下返回 some View，
+        // 下一行的 `+` 拼接会挂。纯色场景用 iOS 13 的 foregroundColor，行为等价。
+        let stateText = Text(state).foregroundColor(stateTint)
         guard let platformName = item.profile.hostPlatform.displayName else {
             return stateText
         }
-        return Text("\(platformName) · ").foregroundStyle(tokens.secondaryText) + stateText
+        return Text("\(platformName) · ").foregroundColor(tokens.secondaryText) + stateText
     }
 
     /// 重命名、查看连接信息和移除都属于低频管理动作，收进「更多」而不是摆在行里。
