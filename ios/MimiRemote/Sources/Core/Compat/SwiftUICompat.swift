@@ -655,3 +655,32 @@ extension View {
         }
     }
 }
+
+// MARK: - withAnimation completion 形态（iOS 17）
+
+/// `withAnimation(_:completionCriteria:_:completion:)` 是 iOS 17；低版本退化为
+/// `withAnimation(_:_:)` + 按调用方给定上限的延时 completion。
+/// `.logicallyComplete` 的语义本就是「动画逻辑结束即回调」而非视觉结束，
+/// 延时兜底对状态机语义等价；调用方的 revision 守卫保证迟到/竞态下 completion 幂等。
+@discardableResult
+@MainActor
+func compatWithAnimation<Result>(
+    _ animation: Animation? = .default,
+    completionDelayOnLegacy: TimeInterval,
+    _ body: () throws -> Result,
+    completion: @escaping () -> Void
+) rethrows -> Result {
+    if #available(iOS 17.0, *) {
+        return try withAnimation(
+            animation,
+            completionCriteria: .logicallyComplete,
+            body,
+            completion: completion
+        )
+    }
+    let result = try withAnimation(animation, body)
+    DispatchQueue.main.asyncAfter(deadline: .now() + completionDelayOnLegacy) {
+        completion()
+    }
+    return result
+}

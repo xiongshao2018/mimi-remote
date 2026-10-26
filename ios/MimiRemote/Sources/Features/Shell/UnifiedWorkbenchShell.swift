@@ -494,12 +494,16 @@ struct UnifiedWorkbenchShell: View {
         )
         storedFloatingSidebarVisible = target == .open
 
-        withAnimation(
+        // withAnimation 的 completionCriteria 形态是 iOS 17；16.x 由兼容层退化为
+        // 普通 withAnimation + 延时 completion。0.8s 是 gestureSettling 弹簧
+        // （response 0.28、阻尼 0.82、带释放初速）逻辑完成的上限；completion 只复位
+        // 状态机（revision 守卫幂等），视觉插值由 SwiftUI 独立驱动，不受 completion 时机影响。
+        compatWithAnimation(
             MimiMotion.gestureSettling.animation(
                 reduceMotion: reduceMotion,
                 initialVelocity: settling.springInitialVelocity
             ),
-            completionCriteria: .logicallyComplete
+            completionDelayOnLegacy: 0.8
         ) {
             floatingSidebarPresentation.startSettling(settling)
         } completion: {

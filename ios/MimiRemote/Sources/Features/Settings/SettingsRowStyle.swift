@@ -229,7 +229,7 @@ extension View {
     /// 卡片之间的距离只由 `SettingsGroupHeader` 决定。必须挂在离 Form 最近的位置，
     /// 外层的 listSectionSpacing 会被内层覆盖。
     func dividedSettingsList() -> some View {
-        .compatListSectionSpacing(0)
+        compatListSectionSpacing(0)
             .environment(\.defaultMinListHeaderHeight, 0)
     }
 }
