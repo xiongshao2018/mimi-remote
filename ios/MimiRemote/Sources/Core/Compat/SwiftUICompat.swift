@@ -520,22 +520,14 @@ extension View {
 
 // MARK: - presentationCompactAdaptation（iOS 16.4 单参 / iOS 17 双参）
 
-/// case 名与系统的 `PresentationCompactAdaptation` 一致，调用点只换修饰符名。
+/// case 名与系统枚举一致。系统枚举的名字在本 SDK 的 Swift 界面里不可直接引用
+/// （run 40278252298：`cannot find type 'PresentationCompactAdaptation' in scope`），
+/// 所以兼容层内部一律用 `.sheet` 这类字面量在 `#available` 分支里现场推断，不写类型名。
 enum CompatPresentationAdaptation {
     case automatic
     case popover
     case sheet
     case fullScreenCover
-
-    @available(iOS 16.4, *)
-    var native: PresentationCompactAdaptation {
-        switch self {
-        case .automatic: return .automatic
-        case .popover: return .popover
-        case .sheet: return .sheet
-        case .fullScreenCover: return .fullScreenCover
-        }
-    }
 }
 
 extension View {
@@ -544,7 +536,12 @@ extension View {
     @ViewBuilder
     func compatPresentationCompactAdaptation(_ adaptation: CompatPresentationAdaptation) -> some View {
         if #available(iOS 16.4, *) {
-            self.presentationCompactAdaptation(adaptation.native)
+            switch adaptation {
+            case .automatic: self.presentationCompactAdaptation(.automatic)
+            case .popover: self.presentationCompactAdaptation(.popover)
+            case .sheet: self.presentationCompactAdaptation(.sheet)
+            case .fullScreenCover: self.presentationCompactAdaptation(.fullScreenCover)
+            }
         } else {
             self
         }
@@ -557,11 +554,26 @@ extension View {
         vertical: CompatPresentationAdaptation
     ) -> some View {
         if #available(iOS 17.0, *) {
-            self.presentationCompactAdaptation(horizontal: horizontal.native, vertical: vertical.native)
-        } else if #available(iOS 16.4, *) {
-            self.presentationCompactAdaptation(horizontal.native)
+            switch horizontal, vertical {
+            case (.automatic, .automatic): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .automatic)
+            case (.automatic, .popover): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .popover)
+            case (.automatic, .sheet): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .sheet)
+            case (.automatic, .fullScreenCover): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .fullScreenCover)
+            case (.popover, .automatic): self.presentationCompactAdaptation(horizontal: .popover, vertical: .automatic)
+            case (.popover, .popover): self.presentationCompactAdaptation(horizontal: .popover, vertical: .popover)
+            case (.popover, .sheet): self.presentationCompactAdaptation(horizontal: .popover, vertical: .sheet)
+            case (.popover, .fullScreenCover): self.presentationCompactAdaptation(horizontal: .popover, vertical: .fullScreenCover)
+            case (.sheet, .automatic): self.presentationCompactAdaptation(horizontal: .sheet, vertical: .automatic)
+            case (.sheet, .popover): self.presentationCompactAdaptation(horizontal: .sheet, vertical: .popover)
+            case (.sheet, .sheet): self.presentationCompactAdaptation(horizontal: .sheet, vertical: .sheet)
+            case (.sheet, .fullScreenCover): self.presentationCompactAdaptation(horizontal: .sheet, vertical: .fullScreenCover)
+            case (.fullScreenCover, .automatic): self.presentationCompactAdaptation(horizontal: .fullScreenCover, vertical: .automatic)
+            case (.fullScreenCover, .popover): self.presentationCompactAdaptation(horizontal: .fullScreenCover, vertical: .popover)
+            case (.fullScreenCover, .sheet): self.presentationCompactAdaptation(horizontal: .fullScreenCover, vertical: .sheet)
+            case (.fullScreenCover, .fullScreenCover): self.presentationCompactAdaptation(horizontal: .fullScreenCover, vertical: .fullScreenCover)
+            }
         } else {
-            self
+            compatPresentationCompactAdaptation(horizontal)
         }
     }
 }
