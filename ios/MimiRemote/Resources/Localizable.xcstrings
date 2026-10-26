@@ -45778,6 +45778,41 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "装好后打开 Mimi Remote，按提示完成设置，就会显示配对二维码。" } }
       }
     },
+    "ui.host_metric_cpu": {
+      "comment": "Accessibility label for the CPU usage chip in the composer host metrics strip.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "CPU" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CPU" } }
+      }
+    },
+    "ui.host_metric_memory": {
+      "comment": "Accessibility label for the memory usage chip in the composer host metrics strip.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内存" } }
+      }
+    },
+    "ui.host_metric_disk": {
+      "comment": "Accessibility label for the disk usage chip in the composer host metrics strip.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disk" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "磁盘" } }
+      }
+    },
+    "ui.host_metric_download": {
+      "comment": "Accessibility label for the download speed chip in the composer host metrics strip.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Download" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "下载" } }
+      }
+    },
+    "ui.host_metric_upload": {
+      "comment": "Accessibility label for the upload speed chip in the composer host metrics strip.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Upload" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上传" } }
+      }
+    },
     "ui.scan_guidance_aim": {
       "comment": "User-facing UI text. Keep this stable semantic key; never use catalog values for protocol fields or log parsing.",
       "localizations": {

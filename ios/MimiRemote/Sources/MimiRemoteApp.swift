@@ -437,6 +437,7 @@ struct MimiRemoteApp: App {
     @StateObject private var workspaceAppearanceStore: WorkspaceAppearanceStore
     @StateObject private var notificationResponseAdapter: SessionNotificationResponseAdapter
     @StateObject private var hostStatusStore: HostStatusStore
+    @StateObject private var hostMetricsStore: HostMetricsStore
     @StateObject private var lockScreenApprovalStore: LockScreenApprovalStore
     /// 把会话标题写进 App Group，通知扩展据此改写锁屏通知；随 App 生命周期常驻。
     @StateObject private var notificationTitleCacheWriter: NotificationTitleCacheWriter
@@ -514,6 +515,12 @@ struct MimiRemoteApp: App {
         _workspaceAppearanceStore = StateObject(wrappedValue: workspaceAppearanceStore)
         _notificationResponseAdapter = StateObject(wrappedValue: notificationResponseAdapter)
         _hostStatusStore = StateObject(wrappedValue: HostStatusStore())
+        let hostMetricsStore = HostMetricsStore()
+        hostMetricsStore.makeClient = { [weak appStore] in
+            guard let appStore else { throw CancellationError() }
+            return try appStore.client()
+        }
+        _hostMetricsStore = StateObject(wrappedValue: hostMetricsStore)
 		let lockScreenApprovalStore = LockScreenApprovalStore()
 		_lockScreenApprovalStore = StateObject(wrappedValue: lockScreenApprovalStore)
 		// 会话标题缓存只在锁屏提醒开启时维护；写入防抖并在后台队列完成。
@@ -621,6 +628,7 @@ struct MimiRemoteApp: App {
                 .environmentObject(workspaceAppearanceStore)
                 .environmentObject(notificationResponseAdapter)
                 .environmentObject(hostStatusStore)
+                .environment(\.hostMetricsStore, hostMetricsStore)
                 .environmentObject(tailcatExperimentController)
                 .environmentObject(managedConnectionEntitlementStore)
                 .environmentObject(managedConnectionDeviceStore)

@@ -22,6 +22,7 @@ import (
 	"github.com/gaixianggeng/mimi-remote/internal/diagnosticlog"
 	"github.com/gaixianggeng/mimi-remote/internal/doctor"
 	"github.com/gaixianggeng/mimi-remote/internal/hostinfo"
+	"github.com/gaixianggeng/mimi-remote/internal/hostmetrics"
 	"github.com/gaixianggeng/mimi-remote/internal/projects"
 	"github.com/gaixianggeng/mimi-remote/internal/protocolcontract"
 	"github.com/gaixianggeng/mimi-remote/internal/pushbridge"
@@ -58,6 +59,11 @@ type Router struct {
 	// 没有 Tailscale 名称，客户端据此在用户未自定义名字时显示真实设备名。nil 或空值时
 	// 不宣告该字段，客户端继续按原有回退显示地址。
 	hostDeviceNameLookup func(context.Context) string
+	// hostSampler 服务 /api/host/metrics 的实时资源采样。CPU 占用与网络速率
+	// 依赖相邻两次采样的差值，所以必须跨请求持有状态；懒初始化让直接构造
+	// Router 的测试无需显式装配。
+	hostSamplerOnce sync.Once
+	hostSampler     *hostmetrics.Sampler
 	// upstreamReadiness 对高频 readyz 轮询做短 TTL + single-flight，避免每 300ms 都创建 WebSocket。
 	upstreamReadiness *appServerReadinessProbe
 	// runtimeStatus 只服务本机菜单栏。额度探测可能访问 OAuth/Keychain 和 provider，
@@ -324,6 +330,8 @@ func NewRouterWithInstallationIDAndOptions(
 	mux.Handle("/api/voice/transcribe", authed(http.HandlerFunc(r.voiceTranscribeHandler)))
 	mux.Handle("/api/runtime/status", authed(http.HandlerFunc(r.runtimeStatusHandler)))
 	mux.Handle("/api/host/modules", authed(http.HandlerFunc(r.moduleStatusHandler)))
+	mux.Handle("/api/host/hardware", authed(http.HandlerFunc(r.hostHardwareHandler)))
+	mux.Handle("/api/host/metrics", authed(http.HandlerFunc(r.hostMetricsHandler)))
 	mux.Handle("/api/app-server/config", authed(http.HandlerFunc(r.appServerConfigHandler)))
 	mux.Handle("/api/app-server/history-media/", authed(http.HandlerFunc(r.appServerHistoryMediaHandler)))
 	mux.Handle("/api/app-server/history-output/", authed(http.HandlerFunc(r.appServerHistoryOutputHandler)))
