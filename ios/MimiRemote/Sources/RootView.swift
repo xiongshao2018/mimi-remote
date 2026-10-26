@@ -35,7 +35,10 @@ struct RootView: View {
     @EnvironmentObject private var managedConnectionEntitlementStore: ManagedConnectionEntitlementStore
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+#if !MIMI_LEGACY_IOS
+    // iOS 18 才有的环境键，16.2 构建下连同下方接线一起排除（见 onAppear 注释）。
     @Environment(\.requestReview) private var requestReview
+#endif
     @State private var showingLogInspector = false
     @SceneStorage("root.lastSessionSnapshot") private var lastSessionSnapshot = ""
     @SceneStorage("root.workbenchRoute.v1") private var workbenchRouteStorage = WorkbenchRestorationRoute.defaultStorageValue
@@ -68,7 +71,11 @@ struct RootView: View {
         }
         .onAppear {
             // 评分邀请只调用系统评分框（#842）；多窗口时由最后出现的窗口装入，系统决定显示在哪个场景。
+            // `\.requestReview` 环境键是 iOS 18，16.2 目标下（TrollStore 工作流注入 MIMI_LEGACY_IOS）
+            // 不接线，协调器的 requestReview 保持 nil，凑齐条件也不弹评分框。
+#if !MIMI_LEGACY_IOS
             sessionStore.appReviewPrompt?.requestReview = { requestReview() }
+#endif
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
