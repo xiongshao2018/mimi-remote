@@ -547,7 +547,7 @@ struct AddContentPanel: View {
         // “降低透明度”开启时改回主题实色，保证文字与控件对比度。
         .compatPresentationBackgroundStyle {
             if reduceTransparency {
-                AnyShapeStyle(tokens.surface)
+                return AnyShapeStyle(tokens.surface)
             } else {
                 // View 当 ShapeStyle 用是 iOS 17 的条件一致性，deployment 16.2 下
                 // #available 救不了类型检查（run 39796966551 的 ShapeStyle 报错），
