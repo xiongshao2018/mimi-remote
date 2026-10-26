@@ -45778,6 +45778,90 @@
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "装好后打开 Mimi Remote，按提示完成设置，就会显示配对二维码。" } }
       }
     },
+    "ui.host_monitor_gpu": {
+      "comment": "Title for the GPU row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "GPU" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显卡" } }
+      }
+    },
+    "ui.host_monitor_vram": {
+      "comment": "Title for the GPU memory row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "VRAM" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显存" } }
+      }
+    },
+    "ui.host_monitor_cpu": {
+      "comment": "Title for the CPU row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "CPU" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "CPU" } }
+      }
+    },
+    "ui.host_monitor_ram": {
+      "comment": "Title for the system memory row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Memory" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内存" } }
+      }
+    },
+    "ui.host_monitor_disk": {
+      "comment": "Title for the disk usage row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disk" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "硬盘" } }
+      }
+    },
+    "ui.host_monitor_io": {
+      "comment": "Title for the disk read/write rate row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Disk I/O" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "磁盘读写" } }
+      }
+    },
+    "ui.host_monitor_net": {
+      "comment": "Title for the network rate row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Network" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "网络" } }
+      }
+    },
+    "ui.host_monitor_engine": {
+      "comment": "Fallback title for the inference engine section when the model name is unknown.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Engine" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "引擎" } }
+      }
+    },
+    "ui.host_monitor_context": {
+      "comment": "Title for the context fill row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Context" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "上下文" } }
+      }
+    },
+    "ui.host_monitor_speed": {
+      "comment": "Title for the generation speed row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Speed" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "速度" } }
+      }
+    },
+    "ui.host_monitor_experts": {
+      "comment": "Title for the experts-in-VRAM row in the device page host monitor card.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Experts" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "专家" } }
+      }
+    },
+    "ui.host_monitor_idle": {
+      "comment": "Shown as the inference engine state when it is not generating.",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Idle" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "空闲" } }
+      }
+    },
     "ui.host_metric_cpu": {
       "comment": "Accessibility label for the CPU usage chip in the composer host metrics strip.",
       "localizations": {

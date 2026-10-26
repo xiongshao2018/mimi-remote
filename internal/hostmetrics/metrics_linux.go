@@ -218,6 +218,85 @@ func readGPUModel() string {
 	return ""
 }
 
+// readGPU 用 nvidia-smi 一次查询拿到型号与实时指标；命令缺失、没有 NVIDIA
+// 显卡或查询失败时返回 OK=false。驱动自带的 nvidia-smi 是本机能拿到的最
+// 直接来源，与 Strata 的 Monitor 页同源（后者走 NVML，口径一致）。
+func readGPU() GPUMetrics {
+	runCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	// --query-gpu 一次返回，避免多次 exec；nounits 让数值不带单位后缀。
+	output, err := exec.CommandContext(runCtx, "nvidia-smi",
+		"--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit",
+		"--format=csv,noheader,nounits").Output()
+	if err != nil || len(output) == 0 || len(output) > 1<<16 {
+		return GPUMetrics{}
+	}
+	line := strings.TrimSpace(string(output))
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx] // 多卡时只报第一块，避免字段语义混淆
+	}
+	fields := strings.Split(line, ",")
+	if len(fields) < 7 {
+		return GPUMetrics{}
+	}
+	for i := range fields {
+		fields[i] = strings.TrimSpace(fields[i])
+	}
+	g := GPUMetrics{OK: true, Name: fields[0]}
+	if v, err := strconv.ParseFloat(fields[1], 64); err == nil {
+		g.UtilPercent = v
+	}
+	if v, err := strconv.ParseFloat(fields[2], 64); err == nil {
+		g.MemUsed = uint64(v)
+	}
+	if v, err := strconv.ParseFloat(fields[3], 64); err == nil {
+		g.MemTotal = uint64(v)
+	}
+	if v, err := strconv.ParseFloat(fields[4], 64); err == nil {
+		g.TempC = v
+	}
+	if v, err := strconv.ParseFloat(fields[5], 64); err == nil {
+		g.PowerW = v
+	}
+	if v, err := strconv.ParseFloat(fields[6], 64); err == nil {
+		g.PowerLimitW = v
+	}
+	return g
+}
+
+// readDiskCounters 汇总所有物理块设备的读写扇区数（512 字节/扇区）。
+// 部分设备（如 loop/ram）没有统计列，跳过即可。
+func readDiskCounters() (readBytes, writeBytes uint64, ok bool) {
+	f, err := os.Open("/proc/diskstats")
+	if err != nil {
+		return 0, 0, false
+	}
+	defer f.Close()
+
+	var readSectors, writeSectors uint64
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		// 字段：major minor name read_ios ... read_sectors(6) ... write_sectors(10)
+		if len(fields) < 14 {
+			continue
+		}
+		if fields[2] == "loop0" || strings.HasPrefix(fields[2], "ram") {
+			continue
+		}
+		if v, err := strconv.ParseUint(fields[5], 10, 64); err == nil {
+			readSectors += v
+		}
+		if v, err := strconv.ParseUint(fields[9], 10, 64); err == nil {
+			writeSectors += v
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return 0, 0, false
+	}
+	return readSectors * 512, writeSectors * 512, true
+}
+
 func readDisks() []Disk {
 	f, err := os.Open("/proc/mounts")
 	if err != nil {

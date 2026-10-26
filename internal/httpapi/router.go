@@ -26,6 +26,7 @@ import (
 	"github.com/gaixianggeng/mimi-remote/internal/projects"
 	"github.com/gaixianggeng/mimi-remote/internal/protocolcontract"
 	"github.com/gaixianggeng/mimi-remote/internal/pushbridge"
+	"github.com/gaixianggeng/mimi-remote/internal/strata"
 	"github.com/gaixianggeng/mimi-remote/internal/tailscaleinfo"
 )
 
@@ -64,6 +65,10 @@ type Router struct {
 	// Router 的测试无需显式装配。
 	hostSamplerOnce sync.Once
 	hostSampler     *hostmetrics.Sampler
+	// strata 服务 /api/host/strata 的可选外部推理引擎监控。配置缺失时是空
+	// Fetcher（Enabled()==false），端点直接返回 404 让客户端本轮不再重试。
+	strataOnce sync.Once
+	strata     *strata.Fetcher
 	// upstreamReadiness 对高频 readyz 轮询做短 TTL + single-flight，避免每 300ms 都创建 WebSocket。
 	upstreamReadiness *appServerReadinessProbe
 	// runtimeStatus 只服务本机菜单栏。额度探测可能访问 OAuth/Keychain 和 provider，
@@ -332,6 +337,7 @@ func NewRouterWithInstallationIDAndOptions(
 	mux.Handle("/api/host/modules", authed(http.HandlerFunc(r.moduleStatusHandler)))
 	mux.Handle("/api/host/hardware", authed(http.HandlerFunc(r.hostHardwareHandler)))
 	mux.Handle("/api/host/metrics", authed(http.HandlerFunc(r.hostMetricsHandler)))
+	mux.Handle("/api/host/strata", authed(http.HandlerFunc(r.hostStrataHandler)))
 	mux.Handle("/api/app-server/config", authed(http.HandlerFunc(r.appServerConfigHandler)))
 	mux.Handle("/api/app-server/history-media/", authed(http.HandlerFunc(r.appServerHistoryMediaHandler)))
 	mux.Handle("/api/app-server/history-output/", authed(http.HandlerFunc(r.appServerHistoryOutputHandler)))

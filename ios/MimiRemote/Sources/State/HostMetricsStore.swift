@@ -11,9 +11,14 @@ final class HostMetricsStore: ObservableObject {
 
     @Published private(set) var hardware: HostHardwareResponse?
     @Published private(set) var metrics: HostMetricsResponse?
+    /// 可选外部推理引擎（Strata）的监控快照；未配置或拉不到时为 nil。
+    @Published private(set) var strata: HostStrataResponse?
     /// 当前连接是否宣告支持硬件/指标端点。404 或解码失败后置 false，
     /// 本轮连接内不再重试；切换连接时重置。
     @Published private(set) var isSupported = true
+    /// Strata 在本轮连接内是否宣告已配置。与 isSupported 分开：Strata 没
+    /// 配置是正常状态，不该把硬件指标一起降级。
+    private var isStrataConfigured = true
 
     /// AppStore 注入的当前连接 client 工厂；与 LiveActivityCoordinator 同一模式。
     var makeClient: (() throws -> AgentAPIClient)?
@@ -28,7 +33,9 @@ final class HostMetricsStore: ObservableObject {
         hardwareFetchedForFingerprint = fingerprint
         hardware = nil
         metrics = nil
+        strata = nil
         isSupported = true
+        isStrataConfigured = true
         if fingerprint != nil {
             refreshHardware()
         }
@@ -62,6 +69,9 @@ final class HostMetricsStore: ObservableObject {
                     self?.handleUnsupported(error)
                     return
                 }
+                // Strata 是可选旁路：它失败不影响硬件指标继续轮询。
+                await self?.refreshStrata(makeClient: makeClient)
+                if Task.isCancelled { return }
                 try? await Task.sleep(nanoseconds: UInt64(Self.metricsPollingInterval * 1_000_000_000))
             }
         }
@@ -71,6 +81,28 @@ final class HostMetricsStore: ObservableObject {
     func stopMetricsPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    /// 拉一次 Strata 快照。404 = 这台电脑没配置 Strata，本轮不再重试；
+    /// 其余错误把快照标成不可用（保留可见性由视图决定），下轮自动恢复。
+    private func refreshStrata(makeClient: () throws -> AgentAPIClient) async {
+        guard isStrataConfigured else { return }
+        do {
+            let response = try await makeClient().hostStrata()
+            if Task.isCancelled { return }
+            strata = response
+        } catch let apiError as AgentAPIError {
+            if case .server(status: let status, _) = apiError, status == 404 || status == 405 {
+                isStrataConfigured = false
+                strata = nil
+                return
+            }
+            if Task.isCancelled { return }
+            strata = HostStrataResponse(available: false)
+        } catch {
+            if Task.isCancelled { return }
+            strata = HostStrataResponse(available: false)
+        }
     }
 
     private func handleUnsupported(_ error: Error) {

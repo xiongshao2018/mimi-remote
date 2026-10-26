@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gaixianggeng/mimi-remote/internal/claudebridge"
 	"github.com/gaixianggeng/mimi-remote/internal/tailscaleinfo"
@@ -82,6 +83,9 @@ type Config struct {
 	WorktreesRoot string           `json:"worktrees_root"`
 	Actions       []ActionConfig   `json:"actions"`
 	DevInsecure   bool             `json:"dev_insecure"`
+	// Strata 是可选的外部推理引擎监控源。地址与 API key 只存本机配置文件，
+	// 不进仓库、不从客户端读取，避免把本机服务凭据暴露给任何连进来的设备。
+	Strata *StrataConfig `json:"strata,omitempty"`
 }
 
 type NetworkConfig struct {
@@ -93,6 +97,23 @@ type NetworkConfig struct {
 	// Public 是「公网 IP 直连」模块：不依赖 Tailscale，手机从任意网络按公网地址连进来。
 	// nil 表示这台主机从未开启过公网，监听与入口策略都不会新增公网通道。
 	Public *PublicAccessConfig `json:"public,omitempty"`
+}
+
+// StrataConfig 描述可选的外部推理引擎（Strata）监控源。agentd 只从本机
+// 配置读取，连不上或没配置时监控卡片里推理部分整块隐藏，不影响硬件指标。
+type StrataConfig struct {
+	BaseURL string `json:"base_url"`
+	// APIKey 在本机配置文件里；不通过任何 API 下发，也不写进日志。
+	APIKey string `json:"api_key,omitempty"`
+	// TimeoutSeconds 未设置时用默认值；拉取是监控轮询的一部分，超时不重试。
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+}
+
+func (c *StrataConfig) TimeoutOrDefault() time.Duration {
+	if c == nil || c.TimeoutSeconds <= 0 {
+		return 3 * time.Second
+	}
+	return time.Duration(c.TimeoutSeconds) * time.Second
 }
 
 type AuthConfig struct {

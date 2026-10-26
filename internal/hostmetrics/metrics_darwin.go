@@ -229,3 +229,11 @@ func readDarwinDisks() []Disk {
 	}
 	return disks
 }
+
+// readGPU：macOS 没有 NVIDIA 驱动栈；Apple Silicon 的 GPU 指标没有
+// 与 nvidia-smi 等价的命令行来源，返回 OK=false 让客户端整块隐藏。
+func readGPU() GPUMetrics { return GPUMetrics{} }
+
+// readDiskCounters：macOS 没有 procfs 等价物，逐设备统计需要 IOKit；
+// 返回 false 时客户端不显示磁盘速率（用量仍然有）。
+func readDiskCounters() (readBytes, writeBytes uint64, ok bool) { return 0, 0, false }

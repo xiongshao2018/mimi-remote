@@ -505,11 +505,22 @@ struct AgentAPIClient {
         )
     }
 
-    /// 电脑实时资源快照（CPU/内存/磁盘用量、网络速率）。服务端按相邻两次
-    /// 采样求差值，调用方按固定间隔轮询即可。
+    /// 电脑实时资源快照（CPU/内存/磁盘用量、网络速率与 GPU 指标）。服务端按
+    /// 相邻两次采样求差值，调用方按固定间隔轮询即可。
     func hostMetrics(timeout: TimeInterval = 20) async throws -> HostMetricsResponse {
         try await request(
             path: "/api/host/metrics",
+            method: "GET",
+            body: Optional<Data>.none,
+            timeout: timeout
+        )
+    }
+
+    /// 可选的外部推理引擎（Strata）监控快照。未配置时服务端返回 404，
+    /// 调用方按「本轮不再重试」处理；引擎暂时拉不到时返回 available=false。
+    func hostStrata(timeout: TimeInterval = 20) async throws -> HostStrataResponse {
+        try await request(
+            path: "/api/host/strata",
             method: "GET",
             body: Optional<Data>.none,
             timeout: timeout

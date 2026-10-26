@@ -75,6 +75,54 @@ struct HostHardwareResponse: Codable, Equatable {
     }
 }
 
+/// agentd `/api/host/metrics` 里的 NVIDIA 显卡实时指标。`ok` 为 false 表示
+/// 这台电脑没有可采集的 NVIDIA 显卡（或驱动命令缺失），客户端整块隐藏。
+struct HostGPUMetrics: Codable, Equatable {
+    let ok: Bool
+    let name: String?
+    let utilPercent: Double
+    let memUsed: UInt64
+    let memTotal: UInt64
+    let tempC: Double
+    let powerW: Double
+    let powerLimitW: Double
+
+    init(
+        ok: Bool = false,
+        name: String? = nil,
+        utilPercent: Double = 0,
+        memUsed: UInt64 = 0,
+        memTotal: UInt64 = 0,
+        tempC: Double = 0,
+        powerW: Double = 0,
+        powerLimitW: Double = 0
+    ) {
+        self.ok = ok
+        self.name = name
+        self.utilPercent = utilPercent
+        self.memUsed = memUsed
+        self.memTotal = memTotal
+        self.tempC = tempC
+        self.powerW = powerW
+        self.powerLimitW = powerLimitW
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ok
+        case name
+        case utilPercent = "util_percent"
+        case memUsed = "mem_used"
+        case memTotal = "mem_total"
+        case tempC = "temp_c"
+        case powerW = "power_w"
+        case powerLimitW = "power_limit_w"
+    }
+
+    /// 显存是 MiB 单位（与 nvidia-smi 一致）；换算成字节复用 ByteFormat。
+    var memUsedBytes: UInt64 { memUsed * 1024 * 1024 }
+    var memTotalBytes: UInt64 { memTotal * 1024 * 1024 }
+}
+
 /// agentd `/api/host/metrics` 的实时资源快照。会话输入框指标条按固定
 /// 间隔轮询；服务端按相邻两次采样求 CPU 与网络速率差值。
 struct HostMetricsResponse: Codable, Equatable {
@@ -85,6 +133,9 @@ struct HostMetricsResponse: Codable, Equatable {
     let diskTotal: UInt64
     let networkRXBPS: UInt64
     let networkTXBPS: UInt64
+    let diskReadBPS: UInt64
+    let diskWriteBPS: UInt64
+    let gpu: HostGPUMetrics
 
     init(
         cpuUsagePercent: Double = 0,
@@ -93,7 +144,10 @@ struct HostMetricsResponse: Codable, Equatable {
         diskUsed: UInt64 = 0,
         diskTotal: UInt64 = 0,
         networkRXBPS: UInt64 = 0,
-        networkTXBPS: UInt64 = 0
+        networkTXBPS: UInt64 = 0,
+        diskReadBPS: UInt64 = 0,
+        diskWriteBPS: UInt64 = 0,
+        gpu: HostGPUMetrics = HostGPUMetrics()
     ) {
         self.cpuUsagePercent = cpuUsagePercent
         self.memoryUsed = memoryUsed
@@ -102,6 +156,9 @@ struct HostMetricsResponse: Codable, Equatable {
         self.diskTotal = diskTotal
         self.networkRXBPS = networkRXBPS
         self.networkTXBPS = networkTXBPS
+        self.diskReadBPS = diskReadBPS
+        self.diskWriteBPS = diskWriteBPS
+        self.gpu = gpu
     }
 
     enum CodingKeys: String, CodingKey {
@@ -112,6 +169,85 @@ struct HostMetricsResponse: Codable, Equatable {
         case diskTotal = "disk_total"
         case networkRXBPS = "network_rx_bps"
         case networkTXBPS = "network_tx_bps"
+        case diskReadBPS = "disk_read_bps"
+        case diskWriteBPS = "disk_write_bps"
+        case gpu
+    }
+}
+
+/// agentd `/api/host/strata` 的可选外部推理引擎（Strata）监控快照。
+/// `available` 为 false 时整块隐藏：没配置 Strata、或引擎暂时拉不到。
+/// 数值字段全是可选项——Strata 版本差异时缺失的字段按缺省隐藏对应行。
+struct HostStrataResponse: Codable, Equatable {
+    let available: Bool
+    let state: String?
+    let phase: String?
+    let queued: Int?
+    let promptTokens: Int64?
+    let promptRead: Int64?
+    let generated: Int64?
+    let elapsedSeconds: Double?
+    let tokPerSecond: Double?
+    let prefillTokS: Double?
+    let model: String?
+    let version: String?
+    let maxContext: Int64?
+    let contextFill: Int64?
+    let expertSlots: Int?
+    let expertCacheMiB: Int?
+    let kvResident: Int64?
+    let vramFreeMiB: Int?
+    let conversationSlots: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case available
+        case state
+        case phase
+        case queued
+        case promptTokens = "prompt_tokens"
+        case promptRead = "prompt_read"
+        case generated
+        case elapsedSeconds = "elapsed_s"
+        case tokPerSecond = "tok_s"
+        case prefillTokS = "prefill_tok_s_mean"
+        case model
+        case version
+        case maxContext = "max_context"
+        case contextFill = "context"
+        case expertSlots = "expert_slots"
+        case expertCacheMiB = "expert_cache_mib"
+        case kvResident = "kv_resident"
+        case vramFreeMiB = "vram_free_mib"
+        case conversationSlots = "conversation_cache_slots"
+    }
+
+    /// 上下文占用百分比；缺任一字段时为 nil。
+    var contextFillPercent: Double? {
+        guard let contextFill, let maxContext, maxContext > 0 else { return nil }
+        return Double(contextFill) / Double(maxContext) * 100
+    }
+
+    /// 引擎暂时拉不到的占位快照：与「未配置」（nil）区分开。
+    init(available: Bool) {
+        self.available = available
+        state = nil
+        phase = nil
+        queued = nil
+        promptTokens = nil
+        promptRead = nil
+        generated = nil
+        elapsedSeconds = nil
+        tokPerSecond = nil
+        prefillTokS = nil
+        model = nil
+        version = nil
+        maxContext = nil
+        contextFill = nil
+        expertSlots = nil
+        expertCacheMiB = nil
+        kvResident = nil
+        vramFreeMiB = nil
+        conversationSlots = nil
     }
 }
 

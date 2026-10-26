@@ -30,6 +30,22 @@ type Hardware struct {
 	Disks       []Disk `json:"disks"`
 }
 
+// GPUMetrics 是 NVIDIA 显卡的实时指标。用 nvidia-smi 采集（驱动自带，
+// 与 Strata 的 Monitor 页同源）；没有 NVIDIA 显卡或命令缺失时 OK 为 false，
+// 客户端整块隐藏 GPU 相关项。
+type GPUMetrics struct {
+	OK bool `json:"ok"`
+	// Name 是显卡型号；UtilPercent 是核心利用率；MemUsed/MemTotal 单位是 MiB
+	// （与 nvidia-smi 默认一致），TempC 是核心温度，PowerW 是整卡功耗。
+	Name        string  `json:"name,omitempty"`
+	UtilPercent float64 `json:"util_percent"`
+	MemUsed     uint64  `json:"mem_used"`
+	MemTotal    uint64  `json:"mem_total"`
+	TempC       float64 `json:"temp_c"`
+	PowerW      float64 `json:"power_w"`
+	PowerLimitW float64 `json:"power_limit_w"`
+}
+
 // Metrics 是实时资源快照。CPUUsagePercent 与网络速率来自相邻两次采样的
 // 差值；首次采样时它们为零，内存与磁盘立即有值。
 type Metrics struct {
@@ -40,15 +56,20 @@ type Metrics struct {
 	DiskTotal       uint64  `json:"disk_total"`
 	NetworkRXBPS    uint64  `json:"network_rx_bps"`
 	NetworkTXBPS    uint64  `json:"network_tx_bps"`
+	DiskReadBPS     uint64  `json:"disk_read_bps"`
+	DiskWriteBPS    uint64  `json:"disk_write_bps"`
+	GPU             GPUMetrics `json:"gpu"`
 }
 
 // sample 是单次原始计数，用于相邻两次之间求差。
 type sample struct {
-	at       time.Time
-	cpuTotal uint64
-	cpuIdle  uint64
-	rxBytes  uint64
-	txBytes  uint64
+	at        time.Time
+	cpuTotal  uint64
+	cpuIdle   uint64
+	rxBytes   uint64
+	txBytes   uint64
+	diskRead  uint64
+	diskWrite uint64
 }
 
 // Sampler 保存上一次原始计数。它不是并发安全的单点缓存而是状态机：
@@ -85,6 +106,8 @@ func (s *Sampler) Sample(ctx context.Context) Metrics {
 	if dUsed, dTotal, dOK := readRootDisk(); dOK {
 		m.DiskUsed, m.DiskTotal = dUsed, dTotal
 	}
+	// GPU 是瞬时值，与差值无关；没有显卡时 GPUMetrics.OK 为 false。
+	m.GPU = readGPU()
 
 	if s.last == nil {
 		// 首次采样没有差值可算；等一个短窗口再采一次，让首个响应就带
@@ -117,6 +140,10 @@ func (s *Sampler) Sample(ctx context.Context) Metrics {
 			m.NetworkRXBPS = uint64(float64(cur.rxBytes-s.last.rxBytes) / elapsed)
 			m.NetworkTXBPS = uint64(float64(cur.txBytes-s.last.txBytes) / elapsed)
 		}
+		if cur.diskRead >= s.last.diskRead && cur.diskWrite >= s.last.diskWrite {
+			m.DiskReadBPS = uint64(float64(cur.diskRead-s.last.diskRead) / elapsed)
+			m.DiskWriteBPS = uint64(float64(cur.diskWrite-s.last.diskWrite) / elapsed)
+		}
 	}
 	s.last = &cur
 	return m
@@ -129,6 +156,9 @@ func (s *Sampler) readRawCounters() sample {
 	}
 	if rx, tx, ok := readNetCounters(); ok {
 		cur.rxBytes, cur.txBytes = rx, tx
+	}
+	if read, write, ok := readDiskCounters(); ok {
+		cur.diskRead, cur.diskWrite = read, write
 	}
 	return cur
 }

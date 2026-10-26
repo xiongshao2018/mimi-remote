@@ -424,6 +424,9 @@ struct InitialConnectionSettingsSections: View {
                     .accessibilityIdentifier("settings.profile.hardwareSummary")
             }
 
+            // 监控卡片：电脑实时资源 + 可选推理引擎。数据缺失时各分块自行隐藏。
+            HostMonitorCard()
+
             if copiedConnectionProfileID == item.id {
                 // 访问码提醒只在真正复制的那一刻出现，不再常驻设备首页。
                 Text(L10n.text("ui.connection_info_copy_security_notice"))

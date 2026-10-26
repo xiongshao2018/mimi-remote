@@ -217,3 +217,51 @@ func readWindowsDisks() []Disk {
 	}
 	return disks
 }
+
+// readGPU 走与 Linux 相同的 nvidia-smi 查询（NVIDIA 驱动在 Windows 上
+// 同样自带它）；缺失或失败时 OK=false。
+func readGPU() GPUMetrics {
+	runCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(runCtx, "nvidia-smi",
+		"--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit",
+		"--format=csv,noheader,nounits").Output()
+	if err != nil || len(output) == 0 || len(output) > 1<<16 {
+		return GPUMetrics{}
+	}
+	line := strings.TrimSpace(string(output))
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = line[:idx]
+	}
+	fields := strings.Split(line, ",")
+	if len(fields) < 7 {
+		return GPUMetrics{}
+	}
+	for i := range fields {
+		fields[i] = strings.TrimSpace(fields[i])
+	}
+	g := GPUMetrics{OK: true, Name: fields[0]}
+	if v, err := strconv.ParseFloat(fields[1], 64); err == nil {
+		g.UtilPercent = v
+	}
+	if v, err := strconv.ParseFloat(fields[2], 64); err == nil {
+		g.MemUsed = uint64(v)
+	}
+	if v, err := strconv.ParseFloat(fields[3], 64); err == nil {
+		g.MemTotal = uint64(v)
+	}
+	if v, err := strconv.ParseFloat(fields[4], 64); err == nil {
+		g.TempC = v
+	}
+	if v, err := strconv.ParseFloat(fields[5], 64); err == nil {
+		g.PowerW = v
+	}
+	if v, err := strconv.ParseFloat(fields[6], 64); err == nil {
+		g.PowerLimitW = v
+	}
+	return g
+}
+
+// readDiskCounters：Windows 没有 procfs；逐磁盘 IO 计数需要
+// 性能计数器（PDH），这里返回 false，客户端只显示磁盘用量不显示速率。
+func readDiskCounters() (readBytes, writeBytes uint64, ok bool) { return 0, 0, false }
