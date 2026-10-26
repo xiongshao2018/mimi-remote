@@ -461,7 +461,7 @@ extension ComposerView {
             .onDisappear {
                 consumePendingAddContentAction()
             }
-            .presentationCompactAdaptation(horizontal: .popover, vertical: .sheet)
+            .compatPresentationCompactAdaptation(horizontal: .popover, vertical: .sheet)
         }
     }
 

@@ -1598,7 +1598,7 @@ struct ComposerView: View {
                 }
             )
             .environmentObject(themeStore)
-            .presentationCompactAdaptation(.sheet)
+            .compatPresentationCompactAdaptation(.sheet)
         }
     }
 

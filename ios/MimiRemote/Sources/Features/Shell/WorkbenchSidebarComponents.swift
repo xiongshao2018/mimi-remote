@@ -61,7 +61,7 @@ struct AIUsageRingsControl: View {
         }
         .popover(isPresented: $showsDetails, arrowEdge: .top) {
             usageDetails(tokens: tokens)
-                .presentationCompactAdaptation(.sheet)
+                .compatPresentationCompactAdaptation(.sheet)
                 .presentationDetents([.height(360), .medium])
                 .presentationDragIndicator(.visible)
         }
@@ -489,7 +489,7 @@ struct WorkbenchSidebarFooter: View {
     private var newSessionButton: some View {
         if let newSessionPresentationNamespace {
             newSessionButtonContent
-                .matchedTransitionSource(
+                .compatMatchedTransitionSource(
                     id: NewSessionPresentationSource
                         .sidebarNewSession
                         .transitionSourceID,

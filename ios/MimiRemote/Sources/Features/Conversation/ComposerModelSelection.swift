@@ -159,7 +159,7 @@ extension ComposerView {
             // 两个打开入口（按钮与布局交接）都经过这里；目录缺当前 Runtime 时打开即补齐。
             .task { await ensureModelOptionsForComposerRuntime() }
             .environmentObject(themeStore)
-            .presentationCompactAdaptation(horizontal: .sheet, vertical: .sheet)
+            .compatPresentationCompactAdaptation(horizontal: .sheet, vertical: .sheet)
             // compact popover 转成 sheet 后，iOS 26 不会稳定采用 fitted 内容高度。
             // 标准字号只保留与实际模型行数一致的 detent；辅助功能字号则使用
             // large detent，并继续由 Picker 内部滚动，避免放大文字被裁切。

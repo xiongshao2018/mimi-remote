@@ -295,7 +295,7 @@ struct WorkspaceRuntimePopoverPicker: View {
         .accessibilityIdentifier("workspace.sessions.runtimePicker")
         .popover(isPresented: $isPresented, arrowEdge: .top) {
             popoverContent(tokens: tokens)
-                .presentationCompactAdaptation(.popover)
+                .compatPresentationCompactAdaptation(.popover)
                 .task {
                     await WorkspaceSessionRuntimeChoice.recheckUnavailable(
                         in: availableRuntimeProviders,

@@ -518,6 +518,80 @@ extension View {
     }
 }
 
+// MARK: - presentationCompactAdaptation（iOS 16.4 单参 / iOS 17 双参）
+
+/// case 名与系统的 `PresentationCompactAdaptation` 一致，调用点只换修饰符名。
+enum CompatPresentationAdaptation {
+    case automatic
+    case popover
+    case sheet
+    case fullScreenCover
+
+    @available(iOS 16.4, *)
+    var native: PresentationCompactAdaptation {
+        switch self {
+        case .automatic: return .automatic
+        case .popover: return .popover
+        case .sheet: return .sheet
+        case .fullScreenCover: return .fullScreenCover
+        }
+    }
+}
+
+extension View {
+    /// 16.2 不改呈现样式：compact 设备上 popover 本就演化为全屏浮层，iPad 保持 popover，
+    /// 与系统未适配前的行为一致。
+    @ViewBuilder
+    func compatPresentationCompactAdaptation(_ adaptation: CompatPresentationAdaptation) -> some View {
+        if #available(iOS 16.4, *) {
+            self.presentationCompactAdaptation(adaptation.native)
+        } else {
+            self
+        }
+    }
+
+    /// 双参形态是 iOS 17；16.4–16.x 退化成单参（传 horizontal），16.2 不改变呈现样式。
+    @ViewBuilder
+    func compatPresentationCompactAdaptation(
+        horizontal: CompatPresentationAdaptation,
+        vertical: CompatPresentationAdaptation
+    ) -> some View {
+        if #available(iOS 17.0, *) {
+            self.presentationCompactAdaptation(horizontal: horizontal.native, vertical: vertical.native)
+        } else if #available(iOS 16.4, *) {
+            self.presentationCompactAdaptation(horizontal.native)
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - matchedTransitionSource（iOS 18）
+
+extension View {
+    /// 16.2 没有匹配式展开动画：源锚点不注册，目标侧走 `compatZoomTransition` 的同款降级。
+    @ViewBuilder
+    func compatMatchedTransitionSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            self.matchedTransitionSource(id: id, in: namespace)
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - Color.mix（iOS 18）
+
+extension Color {
+    /// 16.2 没有颜色插值：按进度过半切换目标色，观感上是一次硬切而非渐变。
+    static func compatMix(_ from: Color, _ to: Color, by amount: Double) -> Color {
+        if #available(iOS 18.0, *) {
+            return from.mix(with: to, by: amount)
+        }
+        return amount >= 0.5 ? to : from
+    }
+}
+
 // MARK: - 动画预设（Animation.smooth / .snappy / .bounce 是 iOS 17）
 
 extension Animation {

@@ -1599,8 +1599,9 @@ private struct WorkspaceProjectChip: View {
                 Text(project.name)
                     .font(themeStore.uiFont(.subheadline, weight: .semibold))
                     .foregroundStyle(
-                        tokens.secondaryText.mix(
-                            with: tokens.primaryText,
+                        Color.compatMix(
+                            tokens.secondaryText,
+                            tokens.primaryText,
                             by: Double(progress)
                         )
                     )
