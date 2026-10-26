@@ -554,7 +554,7 @@ extension View {
         vertical: CompatPresentationAdaptation
     ) -> some View {
         if #available(iOS 17.0, *) {
-            switch horizontal, vertical {
+            switch (horizontal, vertical) {
             case (.automatic, .automatic): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .automatic)
             case (.automatic, .popover): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .popover)
             case (.automatic, .sheet): self.presentationCompactAdaptation(horizontal: .automatic, vertical: .sheet)
