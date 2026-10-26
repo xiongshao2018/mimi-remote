@@ -724,7 +724,7 @@ struct InitialConnectionSettingsSections: View {
         _ item: ConnectionProfileSettingsItem,
         state: String,
         stateTint: Color
-    ) -> Text {
+    ) -> some View {
         let tokens = themeStore.tokens(for: colorScheme)
         let stateText = Text(state).foregroundStyle(stateTint)
         guard let platformName = item.profile.hostPlatform.displayName else {

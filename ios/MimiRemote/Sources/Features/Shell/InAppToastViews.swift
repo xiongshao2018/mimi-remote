@@ -209,7 +209,7 @@ private struct InAppToastHost: ViewModifier {
     /// 保护区字典的变更流。objectWillChange 发在变更之前，切到主队列下一轮再读值。
     private var placementChanges: AnyPublisher<Void, Never> {
         guard let placement else {
-            return EmptyPublisher<Void, Never>().eraseToAnyPublisher()
+            return Empty<Void, Never>().eraseToAnyPublisher()
         }
         return placement.objectWillChange
             .map { _ in () }
