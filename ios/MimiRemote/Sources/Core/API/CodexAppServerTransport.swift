@@ -158,10 +158,15 @@ protocol CodexAppServerTransport: AnyObject {
 }
 
 final class URLSessionCodexAppServerTransport: CodexAppServerTransport {
+    // 网关 pongWait=150s 且只靠 pong 续期；20s 间隔的客户端 ping 留足
+    // 经公网隧道回传 pong 的余量，同时远早于网关踢线。
+    private static let keepAliveIntervalNanoseconds: UInt64 = 20 * 1_000_000_000
+
     private let session: URLSession
     private let maximumMessageSize: Int
     private var task: URLSessionWebSocketTask?
     private var credentialFingerprint: String?
+    private var keepAliveTask: Task<Void, Never>?
 
     init(
         session: URLSession = AgentTransport.sharedSession,
@@ -181,6 +186,29 @@ final class URLSessionCodexAppServerTransport: CodexAppServerTransport {
         WebSocketMessageLimits.apply(to: nextTask, maximumMessageSize: maximumMessageSize)
         task = nextTask
         nextTask.resume()
+        startKeepAliveIfNeeded()
+    }
+
+    // iOS 17 起 URLSessionWebSocketTask 自动应答服务端 ping；iOS 16 不会，
+    // 网关 pongWait=150s 只靠 pong 续期，空闲连接会被踢掉（探针实证：
+    // 自动回 pong 的客户端经同一隧道活满 330s，iOS 16 客户端 ~156s 死亡）。
+    // 这里只在旧系统补客户端 sendPing，pong 由 URLSession 内部消化、
+    // 网关 PongHandler 续期读 deadline；iOS 18 构建路径完全不变。
+    private func startKeepAliveIfNeeded() {
+        keepAliveTask?.cancel()
+        if #available(iOS 17.0, *) {
+            return
+        }
+        keepAliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.keepAliveIntervalNanoseconds)
+                guard !Task.isCancelled, let task = self?.task else { return }
+                // 网关在收到 ping 时立即续期读 deadline，pong 是否回传不影响保活；
+                // 公网隧道偶发丢 pong 不能让保活自杀。连接真死时 sendPing 与
+                // receiveLoop 同时失败，断连由 receiveLoop 统一观察并走重连。
+                task.sendPing { _ in }
+            }
+        }
     }
 
     func send(_ text: String) async throws {
@@ -223,6 +251,8 @@ final class URLSessionCodexAppServerTransport: CodexAppServerTransport {
     }
 
     func close() async {
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         credentialFingerprint = nil

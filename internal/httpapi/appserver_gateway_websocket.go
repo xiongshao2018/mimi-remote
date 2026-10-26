@@ -62,6 +62,15 @@ func configureGatewayReadConn(conn *websocket.Conn) {
 	conn.SetPongHandler(func(string) error {
 		return conn.SetReadDeadline(time.Now().Add(appServerGatewayPongWait))
 	})
+	// iOS 16 的 URLSessionWebSocketTask 不会自动应答服务端 ping（iOS 17+ 才自动），
+	// 它唯一能发的保活帧是客户端 ping。把 ping 同样视为活性：续期读 deadline
+	// 并按协议回 pong。否则旧客户端只能靠 pong 续期，空闲连接必被 pongWait 踢线
+	// （实证：iOS 16 手机 WS 寿命 156s ≈ pongWait 150s + 握手，自动回 pong 的
+	// 探针客户端经同一隧道活满 330s）。
+	conn.SetPingHandler(func(appData string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(appServerGatewayPongWait))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(appServerGatewayWriteWindow))
+	})
 }
 
 func pingGatewayConnection(ctx context.Context, conn *websocket.Conn, writeMu *sync.Mutex, failureStage string) string {
